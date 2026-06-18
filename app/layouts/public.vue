@@ -14,13 +14,5 @@
       <slot />
     </main>
 
-    <!-- Footer -->
-    <footer class="border-t border-surface-200 dark:border-surface-800 mt-12">
-      <div class="mx-auto max-w-3xl px-4 sm:px-6 py-6">
-        <p class="text-xs text-surface-400 text-center">
-          Powered by <a :href="useRuntimeConfig().public.marketingUrl" class="underline hover:text-surface-600 dark:hover:text-surface-300">Reqcore</a>
-        </p>
-      </div>
-    </footer>
   </div>
 </template>
