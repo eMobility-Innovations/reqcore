@@ -1,5 +1,12 @@
 # remotecrew.co.uk/jobs — JSON-LD, light theme, OG image, 301 (EXECUTED)
 
+> **CORRECTION (2026-06-19):** The "DEPLOY GOTCHA" below (blaming app-public's
+> entrypoint) was a **MISDIAGNOSIS**. The real failing container was **minio**
+> (broken overlay rootfs + leaked network endpoint). `docker start
+> reqcore_app_public` "fixed" it only by coincidence. Both open follow-ups
+> (bare-root CF redirect + the "entrypoint" bug) are now CLOSED. See
+> `2026-06-19_minio-rootcause-cf-bareroot-redirect.md` for the real root cause + fix.
+
 ## Status: DONE & LIVE (one deploy gotcha + one optional follow-up)
 
 ## What was done
