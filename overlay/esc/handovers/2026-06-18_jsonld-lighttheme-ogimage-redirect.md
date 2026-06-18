@@ -47,3 +47,20 @@ abs entrypoint; admin reqcore_app unaffected). TODO: investigate compose entrypo
 - **Bare-root jobs.remotecrew.co.uk/ -> /jobs**: via Cloudflare exact-match redirect (see #1).
 
 ## Resume: ssh ct213; cd /opt/reqcore (branch esc). RM on ssh pangolin /home/redirect-manager.
+
+## Session addendum — WordPress plugin decisions + open follow-ups (2026-06-18)
+
+### WordPress (CT122 = remotecrew.co.uk; applies to ALL service sites — Woo catalog, no checkout)
+Current plugins: Akismet, Contact Form 7, HFCM (headers/footers), Site Kit, WP Mail SMTP, WPForms Lite, WPCode Lite.
+Decisions:
+- **Install Rank Math SEO** (fixes missing OG/link-previews; per-page OG+schema; Woo-friendly). Set a DEFAULT social image in Rank Math -> Titles & Meta -> Social.
+- **Drop redundancies:** keep WPForms Lite (drop Contact Form 7); keep WPCode Lite (drop HFCM). Review/remove unused miniOrange social-login if present.
+- **Security:** user runs **CrowdSec AppSec (full WAF)** at Pangolin edge -> DO NOT install Wordfence firewall (redundant). Add **WPScan** plugin for vuln alerts (inside-WP integrity the WAF cannot see). Optional Wordfence scan-only (firewall off).
+- **Image optimization:** **EWWW Image Optimizer in LOCAL mode** (unlimited, free, no subscription, images stay on server). Chosen over ShortPixel (ShortPixel = slightly better compression + AVIF + offloads CPU, but cloud/subscription). EWWW local needs binaries in the WP container: `apt install jpegoptim optipng pngquant webp` (else it falls back to cloud = the trap). Converter-for-Media is an alt for WebP/AVIF.
+- **Page cache:** rely on **Cloudflare**. CF free CAN cache HTML via a **Cache Rule (Cache Everything)** but it is OFF by default and needs bypasses (/wp-admin, cart, logged-in cookie). If not comfortable editing CF rules -> install **WP Super Cache** instead. Do not run both. ShortPixel/EWWW are image-compress, NOT page cache (different jobs).
+- Target lean set per site: Rank Math, WPScan, UpdraftPlus (backups!), WPForms Lite, WPCode Lite, WP Mail SMTP, Site Kit, Akismet, EWWW.
+
+### OPEN FOLLOW-UPS (not done)
+1. Bare-root `jobs.remotecrew.co.uk/` -> board: add a **Cloudflare Single Redirect** (exact match `jobs.remotecrew.co.uk/` -> https://remotecrew.co.uk/jobs). RM cannot do it without breaking /jobs slug preservation (root catch-all doubles -> /jobs/jobs). Check-before-create per CF rules.
+2. **`docker compose up -d app-public` entrypoint bug** (CT213): recreates container with broken `/usr/bin/docker-entrypoint.sh` -> fails. Workaround in use: after `up`, run `docker start reqcore_app_public` (image entrypoint resolves to /usr/local/bin via PATH). Root-cause the compose merge entrypoint resolution; admin reqcore_app unaffected.
+3. Install the WP plugin set above across all service WordPress sites (+ EWWW binaries in containers).
