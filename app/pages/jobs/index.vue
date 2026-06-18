@@ -19,6 +19,10 @@ const sourceQuery = computed(() => {
   return q
 })
 
+// Absolute og:image URL (see app/pages/jobs/[slug]/index.vue for rationale):
+// relative values 404 when this page is proxied onto a different apex.
+const ogImageUrl = `${useRuntimeConfig().public.siteUrl}/brand/remote-crew-og.png`
+
 useSeoMeta({
   title: 'Open Positions — Job Board',
   description:
@@ -27,8 +31,9 @@ useSeoMeta({
   ogDescription:
     'Browse open job positions and apply directly. Powered by the open-source ATS you actually own.',
   ogType: 'website',
-  ogImage: '/reqcore-banner-github.jpeg',
+  ogImage: ogImageUrl,
   twitterCard: 'summary_large_image',
+  twitterImage: ogImageUrl,
   twitterTitle: 'Open Positions — Reqcore Job Board',
   twitterDescription:
     'Browse open job positions and apply directly.',

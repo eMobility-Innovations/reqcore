@@ -193,6 +193,11 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
+      /** Canonical public site origin (baked from NUXT_PUBLIC_SITE_URL at build
+       *  time). Used to build ABSOLUTE og:image / canonical URLs — relative
+       *  og:image values are not crawlable and 404 when the page is served on a
+       *  different apex (e.g. remotecrew.co.uk/jobs proxied to this app). */
+      siteUrl,
       /** Base URL of the marketing site (reqcore-web) for cross-domain links */
       marketingUrl:
         process.env.NUXT_PUBLIC_MARKETING_URL || "https://reqcore.com",

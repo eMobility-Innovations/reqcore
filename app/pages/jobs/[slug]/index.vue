@@ -51,6 +51,12 @@ const jobDescriptionPlain = computed(() => markdownToPlainText(job.value?.descri
 // SEO — Meta tags (title, description, OG, Twitter)
 // ─────────────────────────────────────────────
 
+// Absolute og:image URL. Built from the canonical siteUrl (baked from
+// NUXT_PUBLIC_SITE_URL) and served from /brand — a relative value is not
+// crawlable and 404s when this page is proxied onto a different apex
+// (remotecrew.co.uk/jobs). /brand is one of the prefixes routed to this app.
+const ogImageUrl = `${useRuntimeConfig().public.siteUrl}/brand/remote-crew-og.png`
+
 useSeoMeta({
   title: computed(() => job.value ? `${job.value.title} — Hiring Now` : 'Job Details — Reqcore'),
   description: computed(() => {
@@ -66,8 +72,9 @@ useSeoMeta({
     return `Apply for ${job.value.title}${org}. ${job.value.location ?? 'Remote'}.`
   }),
   ogType: 'website',
-  ogImage: '/reqcore-banner-github.jpeg',
+  ogImage: ogImageUrl,
   twitterCard: 'summary_large_image',
+  twitterImage: ogImageUrl,
   twitterTitle: computed(() => job.value?.title ?? 'Job Details'),
   twitterDescription: computed(() => {
     if (!job.value) return 'View job details and apply'
@@ -90,9 +97,13 @@ function mapEmploymentType(type: string): string {
   return map[type] || 'OTHER'
 }
 
-// Build the JobPosting JSON-LD reactively
-watchEffect(() => {
-  if (!job.value) return
+// Build the JobPosting JSON-LD reactively. A computed (rather than a useHead
+// buried inside watchEffect) is required so the structured data is serialized
+// into the SSR <head> — which is what Google for Jobs crawls. A useHead() call
+// made later from inside a watcher does not reliably reach the server-rendered
+// head.
+const jobPostingLd = computed<Record<string, unknown> | null>(() => {
+  if (!job.value) return null
 
   const j = job.value
   const posting: Record<string, unknown> = {
@@ -159,19 +170,27 @@ watchEffect(() => {
     }
   }
 
-  // Inject JSON-LD as a <script> tag (works without @nuxtjs/seo)
-  useHead({
-    script: [
-      {
-        type: 'application/ld+json',
-        innerHTML: JSON.stringify({
-          '@context': 'https://schema.org',
-          ...posting,
-        }),
-      },
-    ],
-  })
+  return {
+    '@context': 'https://schema.org',
+    ...posting,
+  }
 })
+
+// Nonce for the strict, nonce-based CSP (server/middleware/csp.ts). Without it
+// the inline JSON-LD <script> is dropped under script-src 'nonce-…'.
+const _ldNonce = import.meta.server ? (useRequestEvent()?.context?.nonce ?? '') : ''
+
+// Inject the JSON-LD via a top-level reactive useHead so it is serialized into
+// the SSR <head> (what Google for Jobs crawls) and updates once the job loads.
+useHead(() => ({
+  script: jobPostingLd.value
+    ? [{
+        type: 'application/ld+json',
+        innerHTML: JSON.stringify(jobPostingLd.value),
+        ...(_ldNonce ? { nonce: _ldNonce } : {}),
+      }]
+    : [],
+}))
 
 const typeLabels: Record<string, string> = {
   full_time: 'Full-time',

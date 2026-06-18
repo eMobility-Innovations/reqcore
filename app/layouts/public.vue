@@ -22,6 +22,37 @@ useHead({
     },
   ],
 });
+
+// The pre-paint script above only runs once, before Nuxt hydrates. The
+// color-mode plugin (app/plugins/color-mode.client.ts) then re-applies the
+// `.dark` class on hydration based on the visitor's OS / localStorage
+// preference — which flips the public board to black ~1s after load. Re-assert
+// light after mount and keep it pinned with a MutationObserver, so the Remote
+// Crew light theme always wins on public pages regardless of the visitor's
+// system theme. Scoped to this layout's lifecycle; never touches admin pages.
+if (import.meta.client) {
+  let _rcLightObserver: MutationObserver | null = null;
+
+  const _forceLight = () => {
+    const html = document.documentElement;
+    if (html.classList.contains("dark")) html.classList.remove("dark");
+    if (html.style.colorScheme !== "light") html.style.colorScheme = "light";
+  };
+
+  onMounted(() => {
+    _forceLight();
+    _rcLightObserver = new MutationObserver(_forceLight);
+    _rcLightObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
+  });
+
+  onBeforeUnmount(() => {
+    _rcLightObserver?.disconnect();
+    _rcLightObserver = null;
+  });
+}
 </script>
 
 <template>
