@@ -36,7 +36,7 @@ services:
       # baseURL stays "/" — reqcore serves its board at /jobs natively; the apex
       # routes /jobs,/_nuxt,/api here so public URLs are remotecrew.co.uk/jobs/...
     ports:
-      - "127.0.0.1:3001:3000" # public board — localhost only, fronted by Pangolin
+      - "3001:3000" # LAN bind so Pangolin/Traefik (CT191) reaches 213:3001; CT213 has no 1:1 NAT, fronted by Pangolin resource 76
     depends_on:
       # service_started (not service_healthy): the base minio healthcheck uses
       # curl, which the current minio image no longer ships, so minio reports
