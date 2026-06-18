@@ -1,0 +1,13 @@
+diff --git a/app/app.vue b/app/app.vue
+index 8c22b07..333df6f 100644
+--- a/app/app.vue
++++ b/app/app.vue
+@@ -35,8 +35,5 @@ await usePostHogIdentity()
+     <NuxtLayout>
+       <NuxtPage />
+     </NuxtLayout>
+-    <ClientOnly>
+-      <ConsentBanner />
+-    </ClientOnly>
+   </div>
+ </template>
