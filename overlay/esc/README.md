@@ -22,7 +22,7 @@ git apply overlay/esc/patches/*.patch
 
 | File | Change | Why |
 |------|--------|-----|
-| `app/layouts/public.vue` | brand wordmark `Reqcore` -> `Remote Crew`; removed `<LanguageSwitcher />` from the public header | white-label the public job board for Remote Crew; site is English-only |
+| `app/layouts/public.vue` | brand wordmark `Reqcore` -> `Remote Crew`; removed `<LanguageSwitcher />` from the public header; removed the `Powered by Reqcore` footer | white-label the public job board for Remote Crew; site is English-only; no third-party attribution on the public board |
 | `docker-compose.override.yml` | tracked CT213 override: bakes `NUXT_PUBLIC_SITE_URL` build-arg from `.env` (= `https://jobs.remotecrew.co.uk`); remaps MinIO console 9001->9091 | reqcore serves BOTH `ats.fiszu.com` (SSO admin board) and `jobs.remotecrew.co.uk` (public board, no SSO). nuxt-site-config bakes the site URL at **build time** (runtime env is NOT honored), so the public host must be a build arg for correct canonical/OG/sitemap. Using the override keeps base `docker-compose.yml` byte-for-byte upstream. |
 
 Keep every deviation tiny and confined to leaf files (layouts/components) so
