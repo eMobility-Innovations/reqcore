@@ -16,7 +16,11 @@ useHead({
     {
       key: "rc-force-light",
       innerHTML:
-        "try{document.documentElement.classList.remove(\"dark\");document.documentElement.style.colorScheme=\"light\"}catch(e){}",
+        // Persist light to localStorage so app.vue's pre-paint dark-mode-init
+        // (which reads this key FIRST) never adds .dark on any subsequent load
+        // or client navigation — kills the dark flash when opening a job. Then
+        // remove any .dark already applied this paint.
+        "try{localStorage.setItem(\"reqcore-color-mode\",\"light\");document.documentElement.classList.remove(\"dark\");document.documentElement.style.colorScheme=\"light\"}catch(e){}",
       tagPosition: "head",
       ...(_nonce ? { nonce: _nonce } : {}),
     },
