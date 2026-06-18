@@ -35,3 +35,6 @@ playwright/.cache/
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
+
+# DB backup dumps (e.g. pre-upgrade) — legit untracked artifacts
+/backup-*.sql
