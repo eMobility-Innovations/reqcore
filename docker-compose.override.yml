@@ -1,16 +1,51 @@
 # CT213 deployment override — escooterclinic/reqcore, branch `esc`.
 # TRACKED (committed) so the deploy is reproducible; keeps the base
 # docker-compose.yml byte-for-byte upstream for clean `git merge origin/main`.
-#  - app.build.args: bake the public site URL into the Nuxt build so canonical/
-#    OG/sitemap emit the public host. Value comes from .env (NUXT_PUBLIC_SITE_URL,
-#    = https://jobs.remotecrew.co.uk). nuxt-site-config bakes this at build time;
-#    a runtime env is NOT honored, so it must be a build arg.
+#  - app: bake the public site URL into the Nuxt build so canonical/OG emit the
+#    public host. Value comes from .env (NUXT_PUBLIC_SITE_URL = the admin host
+#    https://ats.fiszu.com / jobs.remotecrew.co.uk). nuxt-site-config bakes this
+#    at build time; runtime env is NOT honored, so it must be a build arg.
+#  - app-public: second reqcore service for the PUBLIC job board, served as a
+#    SUBDIRECTORY on the WordPress apex (remotecrew.co.uk/jobs). reqcore already
+#    serves its board natively at /jobs (pages/jobs/*), and / is a Reqcore product
+#    marketing page we do NOT want public. So baseURL stays "/" (default) and only
+#    /jobs, /_nuxt, /api are routed to this container at the apex by Pangolin
+#    (resource 76). NUXT_PUBLIC_SITE_URL=https://remotecrew.co.uk is BAKED at build
+#    so canonical/OG emit https://remotecrew.co.uk/jobs/<slug>. Shares the same
+#    db + minio as the admin app; exposed on 127.0.0.1:3001 for the Pangolin route.
 #  - minio.ports: Portainer agent on CT213 binds 127.0.0.1:9001 -> remap console 9091.
 services:
   app:
     build:
       args:
         NUXT_PUBLIC_SITE_URL: ${NUXT_PUBLIC_SITE_URL}
+
+  app-public:
+    build:
+      context: .
+      args:
+        NUXT_PUBLIC_SITE_URL: https://remotecrew.co.uk
+    image: reqcore-app-public:latest
+    container_name: reqcore_app_public
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Docker-internal hostnames (same shared db + minio as the admin app)
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      S3_ENDPOINT: http://minio:9000
+      # baseURL stays "/" — reqcore serves its board at /jobs natively; the apex
+      # routes /jobs,/_nuxt,/api here so public URLs are remotecrew.co.uk/jobs/...
+    ports:
+      - "127.0.0.1:3001:3000" # public board — localhost only, fronted by Pangolin
+    depends_on:
+      # service_started (not service_healthy): the base minio healthcheck uses
+      # curl, which the current minio image no longer ships, so minio reports
+      # "unhealthy" despite serving fine — service_healthy would deadlock `up`.
+      db:
+        condition: service_started
+      minio:
+        condition: service_started
+
   minio:
     ports: !override
       - "127.0.0.1:9000:9000"
