@@ -1,0 +1,17 @@
+# CT213 deployment override — escooterclinic/reqcore, branch `esc`.
+# TRACKED (committed) so the deploy is reproducible; keeps the base
+# docker-compose.yml byte-for-byte upstream for clean `git merge origin/main`.
+#  - app.build.args: bake the public site URL into the Nuxt build so canonical/
+#    OG/sitemap emit the public host. Value comes from .env (NUXT_PUBLIC_SITE_URL,
+#    = https://jobs.remotecrew.co.uk). nuxt-site-config bakes this at build time;
+#    a runtime env is NOT honored, so it must be a build arg.
+#  - minio.ports: Portainer agent on CT213 binds 127.0.0.1:9001 -> remap console 9091.
+services:
+  app:
+    build:
+      args:
+        NUXT_PUBLIC_SITE_URL: ${NUXT_PUBLIC_SITE_URL}
+  minio:
+    ports: !override
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9091:9001"
