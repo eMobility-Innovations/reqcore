@@ -31,7 +31,48 @@ Keep every deviation tiny and confined to leaf files (layouts/components) so
 `git merge origin/main` stays clean. Never edit broad files like
 `nuxt.config.ts` for cosmetic changes.
 
-## Public domain (jobs.remotecrew.co.uk)
+## Public domain — remotecrew.co.uk/jobs (subdirectory, LIVE since 2026-06-18)
+
+The public board now lives at **`remotecrew.co.uk/jobs`** (subdirectory of the
+WordPress apex) for SEO authority consolidation. Served by a dedicated 2nd
+reqcore build `app-public` (see docker-compose.override.yml) on **CT213:3001**
+with `NUXT_PUBLIC_SITE_URL=https://remotecrew.co.uk` baked (correct canonical/OG)
+and the default `baseURL=/` — reqcore serves its board natively at `/jobs`, so
+NO baseURL change is needed (baseURL=/jobs/ would have doubled to `/jobs/jobs`).
+
+### Pangolin routing (CT191 — lives in SQLite `/home/config/db/db.sqlite`, NOT git)
+
+The apex `remotecrew.co.uk` is the LIVE WordPress site (Pangolin resource **76**,
+catch-all -> 192.168.103.122:80) AND is fronted by a Redirect-Manager SSO router
+`sso-override-remotecrew-co-uk` at **priority 1000** (file provider). To serve
+`/jobs` from reqcore we add path-prefix targets on resource 76 at priority
+**1100** (beats the RM SSO router; Pangolin maps `targets.priority` -> Traefik
+router priority). Reproduce with:
+
+```sql
+-- on CT191: sqlite3 /home/config/db/db.sqlite
+INSERT INTO targets (resourceId,siteId,ip,method,port,enabled,path,pathMatchType,priority)
+VALUES
+ (76,1,192.168.103.213,http,3001,1,/jobs,prefix,1100),
+ (76,1,192.168.103.213,http,3001,1,/_nuxt,prefix,1100),
+ (76,1,192.168.103.213,http,3001,1,/api,prefix,1100),
+ (76,1,192.168.103.213,http,3001,1,/brand,prefix,1100);
+-- Traefik (http provider) repolls every 60s. Rollback: DELETE these rows.
+```
+
+`/jobs` board+detail+apply, `/_nuxt` assets, `/api` public jobs API + apply POST,
+`/brand` the vendored RC logos. All other apex paths (`/`, `/index.php/...`,
+`/wp-*`) stay on WordPress untouched (verified). WP uses non-pretty permalinks so
+`/jobs`,`/_nuxt`,`/api`,`/brand` were all free (404) on the apex.
+
+### TODO (not yet done) — 301 the old subdomain
+`jobs.remotecrew.co.uk` (Pangolin resource 209 -> 213:3000) still serves the board
+directly = duplicate content. Add a path-preserving 301 via the Redirect Manager:
+`jobs.remotecrew.co.uk/jobs/X -> remotecrew.co.uk/jobs/X` and
+`jobs.remotecrew.co.uk/ -> remotecrew.co.uk/jobs`. Must win over the 209 proxy
+(priority 100). See handover 2026-06-18_subdirectory-migration-EXECUTED.md.
+
+## Public domain (jobs.remotecrew.co.uk) — LEGACY (pre-subdirectory)
 
 The public job board is a **reverse proxy** (Pangolin resourceId 209, CT191) to
 `192.168.103.213:3000`, **PUBLIC / no Redirect-Manager SSO** — not an iframe
