@@ -276,6 +276,16 @@ if (import.meta.client) {
   background-color: #ffffff;
 }
 
+/* ESC job-card titles — brand red + uppercase (design-QA: “CURRENT OPPORTUNITIES” mock) */
+.rc-brand-escooter-clinic :deep(.rc-job-title) {
+  color: var(--color-brand-600); /* #E30D13 ESC red */
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+.rc-brand-escooter-clinic :deep(a:hover .rc-job-title) {
+  color: var(--color-brand-700); /* darker red on hover */
+}
+
 /* ── Header / Footer shared styles ───────────────────────────────────────── */
 .rc-header {
   background-color: #ffffff;

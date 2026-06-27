@@ -202,7 +202,7 @@ function formatDate(dateStr: string) {
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
             <!-- Title -->
-            <h2 class="text-base font-semibold text-surface-900 dark:text-surface-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+            <h2 class="rc-job-title text-base font-semibold text-surface-900 dark:text-surface-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
               {{ j.title }}
             </h2>
 
