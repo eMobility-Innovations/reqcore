@@ -19,24 +19,40 @@ const sourceQuery = computed(() => {
   return q
 })
 
-// Absolute og:image URL (see app/pages/jobs/[slug]/index.vue for rationale):
-// relative values 404 when this page is proxied onto a different apex.
-const ogImageUrl = `${useRuntimeConfig().public.siteUrl}/brand/remote-crew-og.png`
+// Brand-aware OG meta — select the correct block via NUXT_PUBLIC_BRAND.
+// remote-crew (default) keeps exact current values unchanged.
+// escooter-clinic switches to ESC copy and ESC og image.
+const _cfg = useRuntimeConfig()
+const _brand = (_cfg.public as Record<string, string>).brand ?? 'remote-crew'
+const _siteUrl = _cfg.public.siteUrl
+
+const brandMeta = _brand === 'escooter-clinic'
+  ? {
+      title: 'Open Positions — Escooter Clinic',
+      description: 'Browse open roles at Escooter Clinic and apply directly.',
+      ogTitle: 'Open Positions — Escooter Clinic',
+      ogDescription: 'Browse open roles at Escooter Clinic and apply directly.',
+      ogImage: `${_siteUrl}/brand/escooter-clinic-og.png`,
+    }
+  : {
+      title: 'Open Positions — Job Board',
+      description: 'Browse open job positions on Reqcore and apply directly. Find your next career opportunity with companies that value transparency.',
+      ogTitle: 'Open Positions — Reqcore Job Board',
+      ogDescription: 'Browse open job positions and apply directly. Powered by the open-source ATS you actually own.',
+      ogImage: `${_siteUrl}/brand/remote-crew-og.png`,
+    }
 
 useSeoMeta({
-  title: 'Open Positions — Job Board',
-  description:
-    'Browse open job positions on Reqcore and apply directly. Find your next career opportunity with companies that value transparency.',
-  ogTitle: 'Open Positions — Reqcore Job Board',
-  ogDescription:
-    'Browse open job positions and apply directly. Powered by the open-source ATS you actually own.',
+  title: brandMeta.title,
+  description: brandMeta.description,
+  ogTitle: brandMeta.ogTitle,
+  ogDescription: brandMeta.ogDescription,
   ogType: 'website',
-  ogImage: ogImageUrl,
+  ogImage: brandMeta.ogImage,
   twitterCard: 'summary_large_image',
-  twitterImage: ogImageUrl,
-  twitterTitle: 'Open Positions — Reqcore Job Board',
-  twitterDescription:
-    'Browse open job positions and apply directly.',
+  twitterImage: brandMeta.ogImage,
+  twitterTitle: brandMeta.ogTitle,
+  twitterDescription: brandMeta.description,
 })
 
 // ─────────────────────────────────────────────

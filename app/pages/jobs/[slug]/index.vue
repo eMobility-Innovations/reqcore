@@ -51,21 +51,27 @@ const jobDescriptionPlain = computed(() => markdownToPlainText(job.value?.descri
 // SEO — Meta tags (title, description, OG, Twitter)
 // ─────────────────────────────────────────────
 
-// Absolute og:image URL. Built from the canonical siteUrl (baked from
-// NUXT_PUBLIC_SITE_URL) and served from /brand — a relative value is not
-// crawlable and 404s when this page is proxied onto a different apex
+// Brand-aware OG image. Built from the canonical siteUrl (NUXT_PUBLIC_SITE_URL).
+// Absolute URL required: relative values 404 when proxied onto a different apex
 // (remotecrew.co.uk/jobs). /brand is one of the prefixes routed to this app.
-const ogImageUrl = `${useRuntimeConfig().public.siteUrl}/brand/remote-crew-og.png`
+const _rc = useRuntimeConfig()
+const _brand = (_rc.public as Record<string, string>).brand ?? 'remote-crew'
+const _siteUrl = _rc.public.siteUrl
+const ogImageUrl = _brand === 'escooter-clinic'
+  ? `${_siteUrl}/brand/escooter-clinic-og.png`
+  : `${_siteUrl}/brand/remote-crew-og.png`
+const _detailSuffix = _brand === 'escooter-clinic' ? 'Escooter Clinic' : 'Hiring Now'
+const _detailFallback = _brand === 'escooter-clinic' ? 'Job Details — Escooter Clinic' : 'Job Details — Reqcore'
 
 useSeoMeta({
-  title: computed(() => job.value ? `${job.value.title} — Hiring Now` : 'Job Details — Reqcore'),
+  title: computed(() => job.value ? `${job.value.title} — ${_detailSuffix}` : _detailFallback),
   description: computed(() => {
     if (!job.value) return 'View job details and apply'
     const loc = job.value.location ? ` in ${job.value.location}` : ''
     const org = job.value.organizationName ? ` at ${job.value.organizationName}` : ''
     return `Apply for ${job.value.title}${org}${loc}. ${jobDescriptionPlain.value.slice(0, 120)}`.trim()
   }),
-  ogTitle: computed(() => job.value ? `${job.value.title} — Hiring Now` : 'Job Details'),
+  ogTitle: computed(() => job.value ? `${job.value.title} — ${_detailSuffix}` : 'Job Details'),
   ogDescription: computed(() => {
     if (!job.value) return 'View job details and apply'
     const org = job.value.organizationName ? ` at ${job.value.organizationName}` : ''
