@@ -1,83 +1,110 @@
-# ESC overlay — escooterclinic/reqcore (branch `esc`, deployed on 001esc CT213)
+# ESC overlay — `escooterclinic/reqcore` (branch `esc`, deployed on 001esc **CT213**)
 
-This fork tracks upstream `reqcore-inc/reqcore` (remote: `origin`). The deploy
-branch is `esc`.
+This is a **fork** of upstream `reqcore-inc/reqcore` (remote: `origin`, HTTPS).
+The deploy branch is **`esc`** (remote: `fork` = `git@github-reqcore:escooterclinic/reqcore.git`).
+One Docker image, three runtime configs, three public surfaces.
 
-## Update procedure (DO NOT hard-reset esc to upstream)
+> **Prime directive: stay upstream-mergeable.** Every deviation is confined to
+> *leaf* files (layouts, pages, a self-contained server plugin/middleware, the
+> tracked compose override, and `public/brand/*` assets). We never touch broad
+> shared files (`app/assets/css/main.css`, the base `docker-compose.yml`) and we
+> keep edits to `nuxt.config.ts` to a couple of additive `runtimeConfig` keys.
+> So `git merge origin/main` only ever conflicts on the handful of lines we own.
 
+---
+
+## 1. What runs where (the three surfaces)
+
+| Container | Port | Public URL | `NUXT_PUBLIC_ORG_SLUG` | `NUXT_PUBLIC_BRAND` | Auth |
+|---|---|---|---|---|---|
+| `reqcore_app` | 3000 | `ats.fiszu.com` (admin + all-org board) | *(unset → all orgs)* | *(reqcore default)* | Keycloak SSO (edge) |
+| `reqcore_app_public` | 3001 | `remotecrew.co.uk/jobs` | `remote-crew` | `remote-crew` | public |
+| `reqcore_app_esc` | 3002 | `jobs.escooterclinic.co.uk` | `escooter-clinic` | `escooter-clinic` | public |
+
+All three are the **same image/source**, differing only by env. `app-public` and
+`app-esc` bake their own `NUXT_PUBLIC_SITE_URL` at **build time** (nuxt-site-config
+does not honor runtime env for canonical/OG), so each host is a separate build.
+They share the same Postgres + MinIO as the admin app.
+
+Redeploy (after a code/asset change):
+```bash
+ssh ct213 'cd /opt/reqcore && docker compose build app-esc app-public && docker compose up -d app-esc app-public'
+# env-only (org/brand) change → `up -d` (recreate) is enough; no rebuild.
+# Push from CT213 is fine UNLESS the diff touches .github/workflows (deploy key lacks workflow scope).
+```
+
+---
+
+## 2. Update procedure — pull upstream WITHOUT losing our work
+
+**Do NOT hard-reset `esc` to upstream.** Merge upstream INTO `esc`:
 ```bash
 cd /opt/reqcore
 git fetch origin
-git merge origin/main      # keeps the ESC commits below; conflicts (if any)
-                           # are limited to the few leaf-file lines we touch
-docker compose build app && docker compose up -d app
+git merge origin/main          # keeps the ESC commits; conflicts (if any) are
+                               # limited to the few leaf-file lines we own
+docker compose build app app-public app-esc && docker compose up -d
 ```
+If `esc` is ever blown away, the two oldest cosmetic deviations can be re-applied
+from `overlay/esc/patches/*.patch` (RC white-label + consent-banner removal). The
+later structural work (per-org boards, ESC brand, iframe) lives as normal commits
+on `esc` — re-apply by cherry-picking, not patches.
 
-If `esc` ever gets hard-reset to upstream, re-apply the deviations with:
-```bash
-git apply overlay/esc/patches/*.patch
-```
+**Conflict-resolution rule:** when a merge conflicts, keep the upstream side of
+the base logic and re-apply *only* our additive hook (the `brand`/`orgSlug`
+branch, the `.rc-job-title` class, etc.). Never resolve a conflict by reverting
+an upstream change.
 
-## Deviations from upstream
+---
 
+## 3. Deviations from upstream (what is "ours")
+
+### 3a. Branding & public layout
 | File | Change | Why |
 |------|--------|-----|
-| `app/layouts/public.vue` | full Remote Crew white-label of the public board (patch `0001`): RC SVG logo in the header, forced **light** theme (nonce-based inline script, mirrors app.vue), Remote Crew palette — cream `#f3f0ec` bg, navy `#2a2952` text, indigo `#444CE7` primary, mint `#5efbd7` accent — applied by remapping reqcore’s `--color-brand-*`/`--color-accent-*` on a scoped `.rc-public` wrapper so child job pages inherit the brand without markup edits; RC footer (`Hire smarter →`). Removed `<LanguageSwitcher />` (English-only). All in this one leaf file + `/public/brand/*` assets so `app/assets/css/main.css` stays byte-for-byte upstream. | make the public job board look like part of remotecrew.co.uk |
-| `public/brand/remote-crew-logo*.svg` | vendored Remote Crew logos (header uses the dark-text footer variant on the light board) | self-contained branding assets for the public board header/footer |
-| `docker-compose.override.yml` | tracked CT213 override: (a) bakes `NUXT_PUBLIC_SITE_URL` build-arg from `.env` for the admin `app`; (b) adds **`app-public`** — a 2nd reqcore build with `NUXT_PUBLIC_SITE_URL=https://remotecrew.co.uk` baked, on `127.0.0.1:3001`, for the public board served as a subdirectory `remotecrew.co.uk/jobs`; (c) remaps MinIO console 9001->9091; (d) `app-public` `depends_on: service_started` (the base minio healthcheck uses curl, absent from the current image, so `service_healthy` deadlocks `up`) | reqcore serves the SSO admin board at `ats.fiszu.com` (root container) and the PUBLIC board at `remotecrew.co.uk/jobs` (app-public). nuxt-site-config bakes the site URL at **build time** (runtime env NOT honored), so each host is a separate build with its own baked `NUXT_PUBLIC_SITE_URL` for correct canonical/OG. reqcore serves its board natively at `/jobs` (pages/jobs/*) so `app-public` keeps the default `baseURL=/` and the apex routes `/jobs`,`/_nuxt`,`/api` to it — NOT `baseURL=/jobs/`, which would double to `/jobs/jobs`. Keeps base `docker-compose.yml` byte-for-byte upstream. |
-| `app/app.vue` | removed the `<ConsentBanner />` mount (patch `0002`) | the PostHog consent popup reads “Help us improve **reqcore** …” — a white-label leak shown to every public candidate; not wanted on a Remote-Crew-branded board |
+| `app/layouts/public.vue` | **Brand-aware public board.** A `brandConfig` map keyed by `runtimeConfig.public.brand` selects logo / header link / footer / CSS-custom-property palette for `remote-crew` (cream/navy/indigo/mint) **and** `escooter-clinic` (grey bg `#F0F0F0`, white cards, red `#E30D13`, cyan `#0DE3DD`, **Akira Expanded** display + **Montserrat** body). Also: forced **light** theme (nonce inline script + `MutationObserver`, both brands are light), brand-aware **favicon** (ESC icon via `useHead`), ESC **job-card title** rule (`.rc-job-title` → brand-red, uppercase), and **iframe embed mode** (`?embed=1` — see §4). Removed `<LanguageSwitcher />`. | one layout white-labels the board per brand; all brand CSS scoped to `.rc-brand-*` so `main.css` stays upstream |
+| `app/pages/jobs/index.vue` | Brand-aware OG/SEO meta (`escooter-clinic` → ESC title/desc/og-image); `.rc-job-title` class on the card `<h2>` (the hook the layout colours red — inert for RC). | per-brand social cards; red ESC titles without touching base card markup logic |
+| `app/pages/jobs/[slug]/index.vue` | Brand-aware OG/SEO meta + ESC og-image on the job detail page. | stop RemoteCrew branding leaking onto ESC job links |
+| `app/app.vue` | Removed the `<ConsentBanner />` mount (patch `0002`). | the PostHog banner says "Help us improve **reqcore**" — a white-label leak to public candidates |
+| `public/brand/*` | Vendored assets: RC logos (`remote-crew-logo*.svg`), ESC `escooter-clinic-logo.png` + `favicon.{ico,png}` + `og.png`, self-hosted fonts (`fonts/AkiraExpanded*.woff2`, `montserrat-*.woff2`). | self-contained branding; `font-src 'self'` CSP-safe |
 
-Keep every deviation tiny and confined to leaf files (layouts/components) so
-`git merge origin/main` stays clean. Never edit broad files like
-`nuxt.config.ts` for cosmetic changes.
+### 3b. Per-org scoping (one DB, three boards)
+| File | Change | Why |
+|------|--------|-----|
+| `server/api/public/jobs/index.get.ts` | Resolve org scope from `?org=<slug>` else `NUXT_PUBLIC_ORG_SLUG`; when set, join `organization` and filter `slug = scope`. **Unset = all orgs** (admin, unchanged). Unknown slug → empty set (not 500). | each brand domain shows ONLY its own jobs; admin still sees everything |
+| `server/api/public/jobs/[slug].get.ts` | When org scope is set, **404** if the job's org ≠ scope. | slugs are globally unique → block cross-brand access on a brand domain |
+| `server/middleware/00-public-root-redirect.ts` | On the public boards (non-empty `orgSlug`), redirect `/` → `/jobs`. Admin unaffected. | brand domains have no marketing root; send visitors straight to the board |
 
-## Public domain — remotecrew.co.uk/jobs (subdirectory, LIVE since 2026-06-18)
+### 3c. Iframe framing (ESC board embeds in idoSell) — see **[IFRAME-EMBED.md](./IFRAME-EMBED.md)**
+| File | Change | Why |
+|------|--------|-----|
+| `server/plugins/esc-frame-headers.ts` | **NEW, brand-gated.** A Nitro `beforeResponse` plugin that — for the `escooter-clinic` container ONLY — removes `X-Frame-Options` and rewrites CSP `frame-ancestors` → `'self' https://escooterclinic.co.uk https://www.escooterclinic.co.uk`. No-op for RC + admin (they keep `DENY` + `'none'`). | the ESC board is iframed inside the idoSell storefront; its pass-through Pangolin route does NOT inject framing, so the app must allow it. Base files (`nuxt.config.ts` routeRule, `server/middleware/csp.ts`) stay upstream-clean. |
 
-The public board now lives at **`remotecrew.co.uk/jobs`** (subdirectory of the
-WordPress apex) for SEO authority consolidation. Served by a dedicated 2nd
-reqcore build `app-public` (see docker-compose.override.yml) on **CT213:3001**
-with `NUXT_PUBLIC_SITE_URL=https://remotecrew.co.uk` baked (correct canonical/OG)
-and the default `baseURL=/` — reqcore serves its board natively at `/jobs`, so
-NO baseURL change is needed (baseURL=/jobs/ would have doubled to `/jobs/jobs`).
+### 3d. Deploy / config
+| File | Change | Why |
+|------|--------|-----|
+| `docker-compose.override.yml` | Tracked CT213 override: bakes `NUXT_PUBLIC_SITE_URL` for `app`; adds **`app-public`** (3001, RC) and **`app-esc`** (3002, ESC) builds; `depends_on: service_started` (base minio healthcheck uses curl, absent from the image → `service_healthy` deadlocks); MinIO console 9001→9091. | keeps base `docker-compose.yml` byte-for-byte upstream while running 3 surfaces |
+| `nuxt.config.ts` | **Additive only:** two `runtimeConfig.public` keys — `orgSlug` and `brand` (read from env). | per-container org + brand selection; minimal touch to a shared file |
 
-### Pangolin routing (CT191 — lives in SQLite `/home/config/db/db.sqlite`, NOT git)
+---
 
-The apex `remotecrew.co.uk` is the LIVE WordPress site (Pangolin resource **76**,
-catch-all -> 192.168.103.122:80) AND is fronted by a Redirect-Manager SSO router
-`sso-override-remotecrew-co-uk` at **priority 1000** (file provider). To serve
-`/jobs` from reqcore we add path-prefix targets on resource 76 at priority
-**1100** (beats the RM SSO router; Pangolin maps `targets.priority` -> Traefik
-router priority). Reproduce with:
+## 4. Edge / DNS (NOT in git — lives in Pangolin CT191 SQLite)
 
-```sql
--- on CT191: sqlite3 /home/config/db/db.sqlite
-INSERT INTO targets (resourceId,siteId,ip,method,port,enabled,path,pathMatchType,priority)
-VALUES
- (76,1,192.168.103.213,http,3001,1,/jobs,prefix,1100),
- (76,1,192.168.103.213,http,3001,1,/_nuxt,prefix,1100),
- (76,1,192.168.103.213,http,3001,1,/api,prefix,1100),
- (76,1,192.168.103.213,http,3001,1,/brand,prefix,1100);
--- Traefik (http provider) repolls every 60s. Rollback: DELETE these rows.
-```
+- **`jobs.escooterclinic.co.uk`** → CF CNAME (proxied) → Pangolin **resource 212** →
+  `CT213:3002`, public, no SSO. This is a **plain pass-through** route — it does
+  NOT inject `frame-ancestors`/strip `X-Frame-Options` (unlike fleet domains such
+  as `ats.fiszu.com`), which is exactly why §3c exists.
+- **`remotecrew.co.uk/jobs`** → Pangolin resource **76** path-prefix targets
+  (`/jobs`,`/_nuxt`,`/api`,`/brand` @ priority 1100) → `CT213:3001`. Apex `/` and
+  `/wp-*` stay on WordPress. (SQL to reproduce is in the git history of this file.)
+- **`ats.fiszu.com`** → fleet edge (Keycloak SSO) → `CT213:3000`.
 
-`/jobs` board+detail+apply, `/_nuxt` assets, `/api` public jobs API + apply POST,
-`/brand` the vendored RC logos. All other apex paths (`/`, `/index.php/...`,
-`/wp-*`) stay on WordPress untouched (verified). WP uses non-pretty permalinks so
-`/jobs`,`/_nuxt`,`/api`,`/brand` were all free (404) on the apex.
+---
 
-### TODO (not yet done) — 301 the old subdomain
-`jobs.remotecrew.co.uk` (Pangolin resource 209 -> 213:3000) still serves the board
-directly = duplicate content. Add a path-preserving 301 via the Redirect Manager:
-`jobs.remotecrew.co.uk/jobs/X -> remotecrew.co.uk/jobs/X` and
-`jobs.remotecrew.co.uk/ -> remotecrew.co.uk/jobs`. Must win over the 209 proxy
-(priority 100). See handover 2026-06-18_subdirectory-migration-EXECUTED.md.
+## 5. Where to look
 
-## Public domain (jobs.remotecrew.co.uk) — LEGACY (pre-subdirectory)
-
-The public job board is a **reverse proxy** (Pangolin resourceId 209, CT191) to
-`192.168.103.213:3000`, **PUBLIC / no Redirect-Manager SSO** — not an iframe
-(reqcore CSP `frame-ancestors` excludes remotecrew.co.uk) and not a redirect
-(would expose the upstream host). The same backend is reached via `ats.fiszu.com`
-for the SSO-gated admin + board; the public board paths are allowlisted in RM
-SSO `excluded_paths` for `ats.fiszu.com`.
-
+- **Iframe embed** (how it works + the idoSell paste snippet + verification):
+  [`overlay/esc/IFRAME-EMBED.md`](./IFRAME-EMBED.md)
+- **Design spec** (per-org boards + ESC brand): `overlay/esc/specs/`
+- **Session handovers** (chronological): `overlay/esc/handovers/`
+- **Re-appliable patches** (RC white-label, consent removal): `overlay/esc/patches/`
