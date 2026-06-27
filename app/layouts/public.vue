@@ -1,77 +1,128 @@
 <script setup lang="ts">
-// ── ESC overlay: Remote Crew white-label for the public job board ──────────
-// Confined to this leaf layout (+ /public/brand assets) so base files and the
-// shared design system (app/assets/css/main.css) stay byte-for-byte upstream.
+// ── ESC overlay: brand-aware public job board layout ───────────────────────
+// Supports 'remote-crew' (current RC branding) and 'escooter-clinic' (ESC brand).
+// Brand is selected via NUXT_PUBLIC_BRAND runtime env (per-container).
+// All brand-specific styles are scoped to this layout + public/brand/ assets
+// so base files stay byte-for-byte upstream.
 //
-// Remote Crew is a light-themed site (cream #f3f0ec, navy #2a2952, mint #5efbd7,
-// indigo #444CE7). reqcore defaults to a system-driven dark theme, so we force
-// light for public pages and remap the brand/accent CSS variables on a wrapper —
-// child job pages (cards, buttons, links) inherit Remote Crew colours for free.
+// Iframe embed mode: ?embed=1 hides header/footer and posts height via postMessage.
 
-// Force light mode before first paint. Mirrors the nonce-based inline-script
-// pattern in app.vue (the CSP in server/middleware/csp.ts is nonce-based).
-const _nonce = import.meta.server ? (useRequestEvent()?.context?.nonce ?? "") : "";
+const config = useRuntimeConfig()
+const route = useRoute()
+
+const brand = (config.public.brand as string) || 'remote-crew'
+const isEmbed = computed(() => !!route.query.embed)
+
+// Brand configuration map
+const brandConfig = {
+  'remote-crew': {
+    logoSrc: '/brand/remote-crew-logo-footer.svg',
+    logoAlt: 'Remote Crew',
+    siteUrl: 'https://remotecrew.co.uk',
+    siteName: 'remotecrew.co.uk',
+    footerText: '© Remote Crew',
+    footerLink: 'Hire smarter →',
+    cssClass: 'rc-brand-remote-crew',
+  },
+  'escooter-clinic': {
+    logoSrc: '/brand/escooter-clinic-logo.png',
+    logoAlt: 'Escooter Clinic',
+    siteUrl: 'https://escooterclinic.co.uk',
+    siteName: 'escooterclinic.co.uk',
+    footerText: '© Escooter Clinic',
+    footerLink: 'Visit our store →',
+    cssClass: 'rc-brand-escooter-clinic',
+  },
+} as const
+
+const bc = computed(
+  () =>
+    brandConfig[brand as keyof typeof brandConfig] ?? brandConfig['remote-crew'],
+)
+
+// ── Force light mode before first paint ───────────────────────────────────
+// Mirrors the nonce-based inline-script pattern in app.vue.
+// Both RC and ESC brands are light-themed — always force light on public pages.
+const _nonce = import.meta.server
+  ? (useRequestEvent()?.context?.nonce ?? '')
+  : ''
 useHead({
   script: [
     {
-      key: "rc-force-light",
+      key: 'rc-force-light',
       innerHTML:
         // Persist light to localStorage so app.vue's pre-paint dark-mode-init
         // (which reads this key FIRST) never adds .dark on any subsequent load
         // or client navigation — kills the dark flash when opening a job. Then
         // remove any .dark already applied this paint.
-        "try{localStorage.setItem(\"reqcore-color-mode\",\"light\");document.documentElement.classList.remove(\"dark\");document.documentElement.style.colorScheme=\"light\"}catch(e){}",
-      tagPosition: "head",
+        'try{localStorage.setItem("reqcore-color-mode","light");document.documentElement.classList.remove("dark");document.documentElement.style.colorScheme="light"}catch(e){}',
+      tagPosition: 'head',
       ...(_nonce ? { nonce: _nonce } : {}),
     },
   ],
-});
+})
 
-// The pre-paint script above only runs once, before Nuxt hydrates. The
-// color-mode plugin (app/plugins/color-mode.client.ts) then re-applies the
-// `.dark` class on hydration based on the visitor's OS / localStorage
-// preference — which flips the public board to black ~1s after load. Re-assert
-// light after mount and keep it pinned with a MutationObserver, so the Remote
-// Crew light theme always wins on public pages regardless of the visitor's
-// system theme. Scoped to this layout's lifecycle; never touches admin pages.
+// ── Keep light pinned after hydration ────────────────────────────────────
+// The color-mode plugin re-applies .dark on hydration based on OS preference.
+// Use a MutationObserver to keep light always winning on public pages.
 if (import.meta.client) {
-  let _rcLightObserver: MutationObserver | null = null;
+  let _rcLightObserver: MutationObserver | null = null
 
   const _forceLight = () => {
-    const html = document.documentElement;
-    if (html.classList.contains("dark")) html.classList.remove("dark");
-    if (html.style.colorScheme !== "light") html.style.colorScheme = "light";
-  };
+    const html = document.documentElement
+    if (html.classList.contains('dark')) html.classList.remove('dark')
+    if (html.style.colorScheme !== 'light') html.style.colorScheme = 'light'
+  }
 
   onMounted(() => {
-    _forceLight();
-    _rcLightObserver = new MutationObserver(_forceLight);
+    _forceLight()
+    _rcLightObserver = new MutationObserver(_forceLight)
     _rcLightObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class", "style"],
-    });
-  });
+      attributeFilter: ['class', 'style'],
+    })
+
+    // ── Iframe embed: auto-height postMessage ─────────────────────────────
+    if (isEmbed.value) {
+      const sendHeight = () => {
+        const h = document.documentElement.scrollHeight
+        window.parent.postMessage({ type: 'reqcore-embed-height', height: h }, '*')
+      }
+      sendHeight()
+      const ro = new ResizeObserver(sendHeight)
+      ro.observe(document.documentElement)
+      // Store on window for disconnect in onBeforeUnmount
+      ;(window as any).__rcResizeObserver = ro
+    }
+  })
 
   onBeforeUnmount(() => {
-    _rcLightObserver?.disconnect();
-    _rcLightObserver = null;
-  });
+    _rcLightObserver?.disconnect()
+    _rcLightObserver = null
+    if (isEmbed.value) {
+      ;(window as any).__rcResizeObserver?.disconnect()
+    }
+  })
 }
 </script>
 
 <template>
-  <div class="rc-public min-h-screen">
-    <!-- Header -->
-    <header class="rc-header">
+  <div
+    class="rc-public"
+    :class="[bc.cssClass, { 'rc-embed': isEmbed, 'min-h-screen': !isEmbed }]"
+  >
+    <!-- Header — hidden in embed mode -->
+    <header v-if="!isEmbed" class="rc-header">
       <div class="mx-auto max-w-3xl px-4 sm:px-6 py-4 flex items-center justify-between">
-        <a href="https://remotecrew.co.uk" aria-label="Remote Crew">
-          <img src="/brand/remote-crew-logo-footer.svg" alt="Remote Crew" class="h-7 w-auto" />
+        <a :href="bc.siteUrl" :aria-label="bc.logoAlt">
+          <img :src="bc.logoSrc" :alt="bc.logoAlt" class="h-7 w-auto" />
         </a>
         <a
-          href="https://remotecrew.co.uk"
-          class="text-sm font-medium text-[#2a2952]/70 hover:text-[#2a2952] transition-colors"
+          :href="bc.siteUrl"
+          class="text-sm font-medium transition-colors"
+          style="color: var(--rc-ink); opacity: 0.7"
         >
-          remotecrew.co.uk
+          {{ bc.siteName }}
         </a>
       </div>
     </header>
@@ -81,15 +132,16 @@ if (import.meta.client) {
       <slot />
     </main>
 
-    <!-- Footer -->
-    <footer class="rc-footer">
+    <!-- Footer — hidden in embed mode -->
+    <footer v-if="!isEmbed" class="rc-footer">
       <div class="mx-auto max-w-3xl px-4 sm:px-6 py-6 flex items-center justify-between gap-4">
-        <span class="text-xs text-[#2a2952]/60">&copy; Remote Crew</span>
+        <span class="text-xs" style="color: var(--rc-ink); opacity: 0.6">{{ bc.footerText }}</span>
         <a
-          href="https://remotecrew.co.uk"
-          class="text-xs font-medium text-[#2a2952]/70 hover:text-[#2a2952] transition-colors"
+          :href="bc.siteUrl"
+          class="text-xs font-medium transition-colors"
+          style="color: var(--rc-ink); opacity: 0.7"
         >
-          Hire smarter &rarr;
+          {{ bc.footerLink }}
         </a>
       </div>
     </footer>
@@ -97,10 +149,60 @@ if (import.meta.client) {
 </template>
 
 <style scoped>
-/* Remote Crew brand palette, scoped to the public board. Remapping reqcore’s
-   --color-brand-* / --color-accent-* makes child pages (job cards, primary
-   buttons, links) render in Remote Crew colours without touching their markup. */
+/* ── Font faces (self-hosted, font-src 'self' CSP compliant) ─────────────── */
+@font-face {
+  font-family: 'Akira Expanded';
+  src: url('/brand/fonts/AkiraExpanded.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Akira Expanded';
+  src: url('/brand/fonts/AkiraExpanded-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/brand/fonts/montserrat-latin-300-normal.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/brand/fonts/montserrat-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/brand/fonts/montserrat-latin-700-normal.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/brand/fonts/montserrat-latin-900-normal.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Shared public wrapper ───────────────────────────────────────────────── */
 .rc-public {
+  /* Default ink (overridden per brand) */
+  --rc-ink: #2a2952;
+}
+
+/* ── Remote Crew brand palette ───────────────────────────────────────────── */
+.rc-brand-remote-crew {
+  --rc-ink: #2a2952;
+
   --color-brand-50: #eef0fe;
   --color-brand-100: #e0e3fd;
   --color-brand-200: #c7ccfb;
@@ -121,13 +223,64 @@ if (import.meta.client) {
   color: #2a2952;
 }
 
+/* ── Escooter Clinic brand palette ───────────────────────────────────────── */
+.rc-brand-escooter-clinic {
+  --rc-ink: #1d1d1b;
+
+  /* Red primary — maps to reqcore brand scale so job titles/buttons/links go red */
+  --color-brand-50: #fff1f1;
+  --color-brand-100: #ffe0e0;
+  --color-brand-200: #ffc5c5;
+  --color-brand-300: #ff9a9a;
+  --color-brand-400: #ff5f5f;
+  --color-brand-500: #f83030;
+  --color-brand-600: #e30d13; /* ESC primary red */
+  --color-brand-700: #c00a10;
+  --color-brand-800: #9f0d12;
+  --color-brand-900: #841216;
+  --color-brand-950: #480509;
+
+  /* Cyan secondary */
+  --color-accent-400: #5af6f3;
+  --color-accent-500: #0de3dd; /* ESC cyan */
+  --color-accent-600: #09b8b3;
+
+  background-color: #f0f0f0; /* ESC light grey background */
+  color: #1d1d1b;
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* ESC headings use Akira Expanded */
+.rc-brand-escooter-clinic :deep(h1),
+.rc-brand-escooter-clinic :deep(h2),
+.rc-brand-escooter-clinic :deep(h3) {
+  font-family: 'Akira Expanded', sans-serif;
+  font-weight: 700;
+}
+
+/* ESC job cards — white surface */
+.rc-brand-escooter-clinic :deep(.job-card),
+.rc-brand-escooter-clinic :deep([data-job-card]) {
+  background-color: #ffffff;
+}
+
+/* ── Header / Footer shared styles ───────────────────────────────────────── */
 .rc-header {
   background-color: #ffffff;
-  border-bottom: 1px solid rgba(42, 41, 82, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .rc-footer {
   margin-top: 3rem;
-  border-top: 1px solid rgba(42, 41, 82, 0.1);
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* ── Embed mode — chrome-less transparent wrapper ────────────────────────── */
+.rc-embed {
+  background-color: transparent;
+  /* No padding/min-height so content sits flush inside the iframe */
+}
+.rc-embed main {
+  padding-top: 0;
 }
 </style>

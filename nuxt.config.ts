@@ -251,6 +251,10 @@ export default defineNuxtConfig({
         string,
         boolean | string
       >,
+      /** Org slug to filter the public job board (empty = all orgs) */
+      orgSlug: process.env.NUXT_PUBLIC_ORG_SLUG || '',
+      /** Brand key for the public layout ('remote-crew' | 'escooter-clinic') */
+      brand: process.env.NUXT_PUBLIC_BRAND || 'remote-crew',
     },
   },
 
