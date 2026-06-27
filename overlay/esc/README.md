@@ -37,7 +37,13 @@ ssh ct213 'cd /opt/reqcore && docker compose build app-esc app-public && docker 
 
 ## 2. Update procedure — pull upstream WITHOUT losing our work
 
-> ⚠️ **2026-06-27 reality check: upstream went closed-source.** `reqcore-inc/reqcore` was **replaced with a 2-commit stub** — `8fa49da Initial commit` + `7916463 "Revise README to reflect new direction for Reqcore"` (2026-06-24). The real source history was deleted from the public remote, so `origin/main` now shares **NO common ancestor** with our `esc` branch (`git merge-base origin/main esc` → empty). **`git merge origin/main` brings nothing but a README and would error on unrelated histories.** Our `esc` branch (523 commits, app source from 2026-02-14) is now the **canonical full copy** of reqcore we hold. The procedure below only applies IF reqcore-inc ever republishes source. Until then, upstream-merging is moot — but we keep the overlay discipline so our changes stay identifiable.
+> ⚠️ **2026-06-27 reality check: upstream went closed-source.** `reqcore-inc/reqcore` was **replaced with a 2-commit stub** — `8fa49da Initial commit` + `7916463 "Revise README to reflect new direction for Reqcore"` (2026-06-24). The real source history was deleted from the public remote, so `origin/main` now shares **NO common ancestor** with our `esc` branch (`git merge-base origin/main esc` → empty). **`git merge origin/main` brings nothing but a README and would error on unrelated histories.** Our `esc` branch (523 commits, app source from 2026-02-14) is now the **canonical full copy** of reqcore we hold. **Go-forward plan (confirmed): reqcore-inc will hand us the LAST open-source version ONCE. We do a single final sync onto it, then we are permanently on our own.** Prep for that one-time merge:
+>
+> 1. **Snapshot now** (safety net) — our `esc` (523 commits) is the only full copy we hold; tag it: `git tag pre-final-oss-sync esc && git push fork pre-final-oss-sync`.
+> 2. **When the OSS drop lands** (tarball / new repo / tag), add it as a remote `final` (e.g. `git remote add final <url> && git fetch final`).
+> 3. **Compare against our base**, not the stub: our app source starts at `72b89f8` (2026-02-14). Diff `final/main` vs our pre-overlay tree to see what upstream changed; the **overlay discipline** (this doc, §3) means our deltas are confined to leaf files, so re-applying them onto the OSS drop is mechanical.
+> 4. **Strategy:** branch `esc-final` off `final/main`, then cherry-pick / replay ONLY our overlay commits (branding, per-org scoping, `esc-frame-headers.ts`, compose override, `public/brand/*`). Histories are unrelated, so prefer cherry-pick over merge. Validate (build all 3 containers), then make `esc-final` the new deploy branch.
+> 5. **After that, upstream is dead.** No more `origin`; we maintain independently. Keep `overlay/esc/` as the record of what was ever ours.
 
 **Do NOT hard-reset `esc` to upstream.** Merge upstream INTO `esc`:
 ```bash
