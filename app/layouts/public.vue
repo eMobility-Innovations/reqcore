@@ -40,6 +40,18 @@ const bc = computed(
     brandConfig[brand as keyof typeof brandConfig] ?? brandConfig['remote-crew'],
 )
 
+// ── Brand-aware favicon ────────────────────────────────────────────────────
+// Overrides the global nuxt.config default when running as escooter-clinic.
+// Browsers use the last matching <link rel="icon"> so layout-level wins.
+useHead({
+  link: brand === 'escooter-clinic'
+    ? [
+        { rel: 'icon', type: 'image/png', href: '/brand/escooter-clinic-favicon.png' },
+        { rel: 'shortcut icon', type: 'image/x-icon', href: '/brand/escooter-clinic-favicon.ico' },
+      ]
+    : [],
+})
+
 // ── Force light mode before first paint ───────────────────────────────────
 // Mirrors the nonce-based inline-script pattern in app.vue.
 // Both RC and ESC brands are light-themed — always force light on public pages.
