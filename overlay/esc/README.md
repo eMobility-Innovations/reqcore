@@ -37,6 +37,8 @@ ssh ct213 'cd /opt/reqcore && docker compose build app-esc app-public && docker 
 
 ## 2. Update procedure — pull upstream WITHOUT losing our work
 
+> ⚠️ **2026-06-27 reality check: upstream went closed-source.** `reqcore-inc/reqcore` was **replaced with a 2-commit stub** — `8fa49da Initial commit` + `7916463 "Revise README to reflect new direction for Reqcore"` (2026-06-24). The real source history was deleted from the public remote, so `origin/main` now shares **NO common ancestor** with our `esc` branch (`git merge-base origin/main esc` → empty). **`git merge origin/main` brings nothing but a README and would error on unrelated histories.** Our `esc` branch (523 commits, app source from 2026-02-14) is now the **canonical full copy** of reqcore we hold. The procedure below only applies IF reqcore-inc ever republishes source. Until then, upstream-merging is moot — but we keep the overlay discipline so our changes stay identifiable.
+
 **Do NOT hard-reset `esc` to upstream.** Merge upstream INTO `esc`:
 ```bash
 cd /opt/reqcore
