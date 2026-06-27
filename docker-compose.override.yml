@@ -13,6 +13,8 @@
 #    (resource 76). NUXT_PUBLIC_SITE_URL=https://remotecrew.co.uk is BAKED at build
 #    so canonical/OG emit https://remotecrew.co.uk/jobs/<slug>. Shares the same
 #    db + minio as the admin app; exposed on 127.0.0.1:3001 for the Pangolin route.
+#  - app-esc: ESC-branded job board for jobs.escooterclinic.co.uk. Same image/source
+#    as app-public; org pinned to 'escooter-clinic' via runtime env. Port 3002.
 #  - minio.ports: Portainer agent on CT213 binds 127.0.0.1:9001 -> remap console 9091.
 services:
   app:
@@ -36,6 +38,10 @@ services:
       # Align RUNTIME site URL with the baked canonical so absolute og:image
       # resolves to remotecrew.co.uk (env_file .env otherwise forces jobs.*).
       NUXT_PUBLIC_SITE_URL: https://remotecrew.co.uk
+      # Pin this container to Remote Crew org — prevents ESC jobs from leaking
+      # onto the RC public board at remotecrew.co.uk/jobs.
+      NUXT_PUBLIC_ORG_SLUG: remote-crew
+      NUXT_PUBLIC_BRAND: remote-crew
       # baseURL stays "/" — reqcore serves its board at /jobs natively; the apex
       # routes /jobs,/_nuxt,/api here so public URLs are remotecrew.co.uk/jobs/...
     ports:
@@ -44,6 +50,31 @@ services:
       # service_started (not service_healthy): the base minio healthcheck uses
       # curl, which the current minio image no longer ships, so minio reports
       # "unhealthy" despite serving fine — service_healthy would deadlock `up`.
+      db:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  app-esc:
+    build:
+      context: .
+      args:
+        NUXT_PUBLIC_SITE_URL: https://jobs.escooterclinic.co.uk
+    image: reqcore-app-esc:latest
+    container_name: reqcore_app_esc
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Docker-internal hostnames (same shared db + minio)
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      S3_ENDPOINT: http://minio:9000
+      NUXT_PUBLIC_SITE_URL: https://jobs.escooterclinic.co.uk
+      # Pin this container to Escooter Clinic org
+      NUXT_PUBLIC_ORG_SLUG: escooter-clinic
+      NUXT_PUBLIC_BRAND: escooter-clinic
+    ports:
+      - "3002:3000" # Pangolin (CT191) → CT213:3002 → jobs.escooterclinic.co.uk
+    depends_on:
       db:
         condition: service_started
       minio:

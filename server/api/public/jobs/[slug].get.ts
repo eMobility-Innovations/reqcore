@@ -6,10 +6,17 @@ import { publicJobSlugSchema } from '../../../utils/schemas/publicApplication'
  * GET /api/public/jobs/:slug
  * Returns job details + custom questions for an open job, resolved by slug.
  * Includes organization name for SEO structured data (Google Jobs).
- * No auth required — this is the public-facing endpoint for applicants.
+ * When org scope is set, 404s if the job belongs to a different org (prevents
+ * cross-brand URL access on a branded domain).
+ * No auth required — public-facing endpoint for applicants.
  */
 export default defineEventHandler(async (event) => {
   const { slug } = await getValidatedRouterParams(event, publicJobSlugSchema.parse)
+
+  // Resolve org scope: runtime env (set per-container for branded boards)
+  const config = useRuntimeConfig(event)
+  const orgScope: string =
+    (typeof config.public.orgSlug === 'string' && config.public.orgSlug.trim()) || ''
 
   const result = await db.query.job.findFirst({
     where: and(eq(job.slug, slug), eq(job.status, 'open')),
@@ -39,6 +46,7 @@ export default defineEventHandler(async (event) => {
         columns: {
           name: true,
           logo: true,
+          slug: true,
         },
       },
       questions: {
@@ -57,6 +65,11 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!result) {
+    throw createError({ statusCode: 404, statusMessage: 'Job not found' })
+  }
+
+  // Org scope guard: if this container is pinned to an org, reject jobs from other orgs
+  if (orgScope && result.organization?.slug !== orgScope) {
     throw createError({ statusCode: 404, statusMessage: 'Job not found' })
   }
 

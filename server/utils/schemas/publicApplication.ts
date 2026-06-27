@@ -56,4 +56,6 @@ export const publicJobsQuerySchema = z.object({
   search: z.string().min(1).max(200).optional(),
   type: z.enum(['full_time', 'part_time', 'contract', 'internship']).optional(),
   location: z.string().min(1).max(200).optional(),
+  /** Optional org slug override — filters jobs to this org. Falls back to NUXT_PUBLIC_ORG_SLUG env. */
+  org: z.string().min(1).max(100).optional(),
 })
