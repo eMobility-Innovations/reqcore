@@ -37,6 +37,25 @@ ssh ct213 'cd /opt/reqcore && docker compose build app-esc app-public && docker 
 
 ## 2. Update procedure — pull upstream WITHOUT losing our work
 
+> ✅ **2026-06-29 — FINAL OSS SYNC DONE. Upstream is now dead; we are independent.**
+> reqcore-inc published a one-time squashed snapshot `1ea7f0a "Publish archived open source
+> snapshot"` at the same `origin` URL (history rewritten, **no common ancestor** with our old
+> `esc`). We did **not** merge it (impossible — unrelated histories). Instead: branched
+> **`esc-final`** off the snapshot and **cherry-picked our 33 overlay commits** onto it (one
+> conflict, in `server/api/public/jobs/[slug].get.ts` — resolved by keeping BOTH upstream's new
+> GDPR privacy-notice lookup AND our org-scope 404 guard). Built all 3 images, applied new
+> migrations (`0029/0030/0031`), verified all 3 surfaces live.
+> - **Deploy branch is now `esc-final`** (pushed to `fork`). The old `esc` (528 commits, real
+>   pre-snapshot history) is retained as the backup tag **`pre-final-oss-sync-20260628`** (on
+>   `fork` + local). New upstream base = snapshot `1ea7f0a`.
+> - Code delta the snapshot brought vs our old base (excl. `overlay/`): **92 files, +22,590/−3,346**
+>   — GDPR data-retention (candidate export/restore/retention APIs + settings), Application
+>   Builder, job preview, e2e privacy tests.
+> - **There is no more `origin` to pull.** Do NOT attempt `git merge origin/main` again. Maintain
+>   independently on `esc-final`. Keep this `overlay/esc/` as the record of what was ever ours.
+>
+> _Historical plan that led here (now executed) is preserved below for context:_
+
 > ⚠️ **2026-06-27 reality check: upstream went closed-source.** `reqcore-inc/reqcore` was **replaced with a 2-commit stub** — `8fa49da Initial commit` + `7916463 "Revise README to reflect new direction for Reqcore"` (2026-06-24). The real source history was deleted from the public remote, so `origin/main` now shares **NO common ancestor** with our `esc` branch (`git merge-base origin/main esc` → empty). **`git merge origin/main` brings nothing but a README and would error on unrelated histories.** Our `esc` branch (523 commits, app source from 2026-02-14) is now the **canonical full copy** of reqcore we hold. **Go-forward plan (confirmed): reqcore-inc will hand us the LAST open-source version ONCE. We do a single final sync onto it, then we are permanently on our own.** Prep for that one-time merge:
 >
 > 1. **Snapshot now** (safety net) — our `esc` (523 commits) is the only full copy we hold; tag it: `git tag pre-final-oss-sync esc && git push fork pre-final-oss-sync`.
