@@ -262,12 +262,19 @@ if (import.meta.client) {
   font-family: 'Montserrat', sans-serif;
 }
 
-/* ESC headings use Akira Expanded */
-.rc-brand-escooter-clinic :deep(h1),
+/* ESC sub-headings use Akira Expanded (display font). */
 .rc-brand-escooter-clinic :deep(h2),
 .rc-brand-escooter-clinic :deep(h3) {
   font-family: 'Akira Expanded', sans-serif;
   font-weight: 700;
+}
+
+/* ESC H1 uses Montserrat — brand-manager call (Michal): the main page heading
+   must be legible above all, so it drops the heavy Akira display face. */
+.rc-brand-escooter-clinic :deep(h1) {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* ESC job cards — white surface */
