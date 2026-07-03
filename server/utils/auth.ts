@@ -2,10 +2,68 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization, genericOAuth } from "better-auth/plugins";
 import { sso } from "@better-auth/sso";
-import { eq } from "drizzle-orm";
+import { stripe as stripePlugin } from "@better-auth/stripe";
+import Stripe from "stripe";
+import { and, eq } from "drizzle-orm";
 import { ac, owner, admin, member } from "~~/shared/permissions";
+import { isBillingActionAllowed } from "~~/shared/billing";
 import { sendOrgInvitationEmail, sendPasswordResetEmail } from "./email";
+import { getMissingStripeBillingVars, isStripeBillingConfigured } from "./env";
+import { buildStripePlans } from "./billing/stripe-plans";
+import { isDemoOrgId, isDemoAccountEmail } from "./demoOrg";
 import * as schema from "../database/schema";
+
+/**
+ * Authorization guard for org-scoped billing. Subscriptions are referenced by
+ * organization id; this verifies the acting user actually belongs to that org
+ * (and, for any mutating action, is an owner/admin). Without this, a user could
+ * start/cancel checkout for an organization they don't control.
+ */
+async function authorizeOrgBilling({
+  userId,
+  referenceId,
+  action,
+}: {
+  userId: string;
+  referenceId: string;
+  action: string;
+}): Promise<boolean> {
+  // The public demo must never buy, change, cancel, or open a billing portal
+  // for a real subscription. Reading the plan is fine; every mutating billing
+  // action is hard-blocked. This runs even for /api/auth/** checkout calls,
+  // which the demo-guard middleware intentionally skips.
+  //
+  // We block on BOTH signals because they have different coverage:
+  //   - the demo *org* (isDemoOrgId) — only resolves when DEMO_ORG_SLUG /
+  //     a Railway preview is configured, so it can be inactive in dev.
+  //   - the demo *account email* (demo@reqcore.com) — always identifies the
+  //     public demo user regardless of env config or which org is active.
+  if (action !== "list-subscription") {
+    const [actingUser] = await db
+      .select({ email: schema.user.email })
+      .from(schema.user)
+      .where(eq(schema.user.id, userId))
+      .limit(1);
+
+    if (isDemoAccountEmail(actingUser?.email) || (await isDemoOrgId(referenceId))) {
+      return false;
+    }
+  }
+
+  const [membership] = await db
+    .select({ role: schema.member.role })
+    .from(schema.member)
+    .where(
+      and(
+        eq(schema.member.userId, userId),
+        eq(schema.member.organizationId, referenceId),
+      ),
+    )
+    .limit(1);
+
+  // Decision (member? reading vs. mutating) lives in a pure, unit-tested helper.
+  return isBillingActionAllowed(membership?.role, action);
+}
 
 type Auth = ReturnType<typeof betterAuth>;
 let _auth: Auth | undefined;
@@ -201,6 +259,15 @@ function resolveBetterAuthUrl(): string {
 function getAuth(): Auth {
   if (!_auth) {
     const baseURL = resolveBetterAuthUrl();
+    const stripeBillingConfigured = isStripeBillingConfigured(env);
+    const missingStripeBillingVars = getMissingStripeBillingVars(env);
+
+    if (missingStripeBillingVars.length > 0) {
+      console.warn(
+        `[Reqcore] Stripe billing disabled: missing ${missingStripeBillingVars.join(", ")}. ` +
+          "Set all Stripe billing variables to enable checkout, or unset the partial Stripe variables.",
+      );
+    }
 
     _auth = betterAuth({
       baseURL,
@@ -247,7 +314,9 @@ function getAuth(): Auth {
       // Disabled in CI/test (GITHUB_ACTIONS or NODE_ENV !== 'production')
       // to prevent E2E test flakiness.
       rateLimit: {
-        enabled: !process.env.CI && !process.env.GITHUB_ACTIONS,
+        enabled: process.env.NODE_ENV === "production"
+          && !process.env.CI
+          && !process.env.GITHUB_ACTIONS,
         window: 60,
         max: 100,        // 100 requests per minute per IP — stops bots, not humans
         storage: "database",
@@ -379,6 +448,36 @@ function getAuth(): Auth {
             }
           },
         }),
+
+        // ── Stripe Billing (org-scoped subscriptions) ───────────────────
+        // Enabled only when all Stripe billing env vars are set. Provides
+        // Stripe-hosted Checkout, the Customer Portal, and signature-verified
+        // webhooks at /api/auth/stripe/webhook (handled by the auth catch-all).
+        ...(stripeBillingConfigured
+          ? [
+              stripePlugin({
+                stripeClient: new Stripe(env.STRIPE_SECRET_KEY!),
+                stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET!,
+                // Customer is created lazily at first checkout, not on sign-up.
+                createCustomerOnSignUp: false,
+                // Bill the organization, not the individual member, so billing
+                // survives membership changes.
+                organization: { enabled: true },
+                subscription: {
+                  enabled: true,
+                  plans: buildStripePlans(env),
+                  // Subscriptions are referenced by organization id; only
+                  // members (owner/admin for mutations) of that org may act.
+                  authorizeReference: async ({ user, referenceId, action }) =>
+                    authorizeOrgBilling({
+                      userId: user.id,
+                      referenceId,
+                      action,
+                    }),
+                },
+              }),
+            ]
+          : []),
       ],
     }) as unknown as Auth;
   }

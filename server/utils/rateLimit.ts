@@ -9,7 +9,7 @@ import type { H3Event } from 'h3'
 // effective limit seen by any single client is maxRequests × replicaCount.
 // Under horizontal scaling, terminate rate limiting at the edge instead:
 // Cloudflare WAF, Caddy `rate_limit`, nginx `limit_req`, or a Redis-backed
-// limiter. See SELF-HOSTING.md → "Scaling horizontally".
+// limiter.
 const _replicaCount = Number(process.env.RAILWAY_REPLICA_COUNT ?? 0)
 if (_replicaCount > 1) {
   console.warn(
@@ -46,11 +46,10 @@ interface RateLimitEntry {
  * builds its own Map, so two limiters never share buckets even when their
  * window/max are identical.
  *
- * Reqcore is designed as a single-instance self-hosted app (Docker Compose
- * on one VPS). If you need to run multiple replicas behind a load balancer,
- * terminate rate limiting at the edge instead — Cloudflare WAF, Caddy
- * `rate_limit`, or nginx `limit_req`. See SELF-HOSTING.md → "Scaling
- * horizontally" for the rationale.
+ * Reqcore is designed as a single-instance deployment (one Railway service,
+ * or one Docker Compose container for self-hosters). If it ever runs
+ * multiple replicas behind a load balancer, terminate rate limiting at the
+ * edge instead — Cloudflare WAF, Caddy `rate_limit`, or nginx `limit_req`.
  *
  * @example
  * ```ts

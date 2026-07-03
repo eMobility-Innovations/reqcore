@@ -12,6 +12,7 @@ import {
   MIME_TO_EXTENSION,
   sanitizeFilename,
 } from '../../../../utils/schemas/document'
+import { restoreCandidateForPublicApplication } from '../../../../utils/candidate-retention'
 
 /** Rate limit: max 5 applications per IP per 15 minutes */
 const applyRateLimit = createRateLimiter({
@@ -178,11 +179,25 @@ export default defineEventHandler(async (event) => {
 
   const existingJob = await db.query.job.findFirst({
     where: and(eq(job.slug, slug), eq(job.status, 'open')),
-    columns: { id: true, organizationId: true, requireResume: true, requireCoverLetter: true, autoScoreOnApply: true },
+    columns: {
+      id: true,
+      organizationId: true,
+      phoneRequirement: true,
+      requireResume: true,
+      requireCoverLetter: true,
+      autoScoreOnApply: true,
+    },
   })
 
   if (!existingJob) {
     throw createError({ statusCode: 404, statusMessage: 'Job not found or not accepting applications' })
+  }
+
+  if (existingJob.phoneRequirement === 'required' && !phone?.trim()) {
+    throw createError({ statusCode: 422, statusMessage: 'Phone number is required for this position' })
+  }
+  if (existingJob.phoneRequirement === 'hidden') {
+    phone = undefined
   }
 
   // Validate required resume
@@ -337,12 +352,20 @@ export default defineEventHandler(async (event) => {
       eq(candidate.organizationId, orgId),
       eq(candidate.email, email.toLowerCase()),
     ),
-    columns: { id: true, firstName: true, lastName: true, phone: true },
+    columns: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      quarantinedAt: true,
+    },
   })
 
   let candidateId: string
+  let restoreFromQuarantine = false
 
   if (existingCandidate) {
+    restoreFromQuarantine = existingCandidate.quarantinedAt !== null
     const updates: Record<string, unknown> = { updatedAt: new Date() }
     if (!existingCandidate.firstName) updates.firstName = firstName
     if (!existingCandidate.lastName) updates.lastName = lastName
@@ -384,6 +407,10 @@ export default defineEventHandler(async (event) => {
       statusCode: 409,
       statusMessage: 'You have already applied to this position',
     })
+  }
+
+  if (restoreFromQuarantine) {
+    await restoreCandidateForPublicApplication(orgId, candidateId)
   }
 
   // ─────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { createRateLimiter } from '../utils/rateLimit'
 
 const SAFE_METHODS = new Set(['GET', 'HEAD'])
 const SKIP_METHODS = new Set(['OPTIONS'])
+const STRIPE_WEBHOOK_PATH = '/api/auth/stripe/webhook'
 
 // Baseline global API limits (per IP)
 const globalReadLimiter = createRateLimiter({
@@ -36,6 +37,7 @@ export default defineEventHandler(async (event) => {
 
   const path = getRequestURL(event).pathname
   if (!path.startsWith('/api/')) return
+  if (path === STRIPE_WEBHOOK_PATH) return
 
   const method = event.method.toUpperCase()
   if (SKIP_METHODS.has(method)) return

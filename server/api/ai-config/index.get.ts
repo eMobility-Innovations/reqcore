@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { aiConfig } from '../../database/schema'
+import { resolveOrgPlanId } from '../../utils/billing/plan'
 
 /**
  * GET /api/ai-config
@@ -32,10 +33,33 @@ export default defineEventHandler(async (event) => {
     orderBy: (t, { desc }) => [desc(t.isDefaultChatbot), desc(t.isDefaultAnalysis), desc(t.createdAt)],
   })
 
-  return rows.map(({ apiKeyEncrypted, ...rest }) => ({
+  const mapped = rows.map(({ apiKeyEncrypted, ...rest }) => ({
     ...rest,
     inputPricePer1m: rest.inputPricePer1m != null ? Number(rest.inputPricePer1m) : null,
     outputPricePer1m: rest.outputPricePer1m != null ? Number(rest.outputPricePer1m) : null,
     hasApiKey: Boolean(apiKeyEncrypted),
   }))
+
+  // Platform-level OpenRouter fallback — orgs with no BYOK config still get AI,
+  // except grandfathered orgs whose free access is explicitly BYOK-only.
+  const allowsPlatformFallback = await resolveOrgPlanId(orgId) !== 'grandfathered'
+  if (allowsPlatformFallback && env.OPENROUTER_API_KEY && !mapped.some(c => c.hasApiKey)) {
+    mapped.push({
+      id: '__platform__',
+      name: 'Platform (OpenRouter)',
+      provider: 'openrouter',
+      model: env.OPENROUTER_MODEL,
+      baseUrl: null,
+      maxTokens: 4096,
+      inputPricePer1m: null,
+      outputPricePer1m: null,
+      isDefaultChatbot: false,
+      isDefaultAnalysis: true,
+      hasApiKey: true,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    })
+  }
+
+  return mapped
 })

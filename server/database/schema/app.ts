@@ -42,6 +42,34 @@ export const dateFormatEnum = pgEnum('date_format', ['mdy', 'dmy', 'ymd'])
 // ─────────────────────────────────────────────
 
 /**
+ * Post-signup onboarding survey answers for an account.
+ *
+ * One row per user. Answers are nullable because each question is skippable.
+ * `organizationId` captures the active organization created during onboarding,
+ * while `userId` is the durable account link for user-level analysis.
+ */
+export const onboardingSurveyResponse = pgTable('onboarding_survey_response', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  signupPlan: text('signup_plan'),
+  signupBilling: text('signup_billing'),
+  companySize: text('company_size'),
+  userRole: text('user_role'),
+  discoverySource: text('discovery_source'),
+  currentHiringProcess: text('current_hiring_process'),
+  expectedRoles12m: text('expected_roles_12m'),
+  answeredCount: integer('answered_count').notNull().default(0),
+  skippedCount: integer('skipped_count').notNull().default(0),
+  completedAt: timestamp('completed_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  uniqueIndex('onboarding_survey_response_user_id_idx').on(t.userId),
+  index('onboarding_survey_response_organization_id_idx').on(t.organizationId),
+]))
+
+/**
  * Jobs / Positions within an organization.
  */
 export const job = pgTable('job', {
@@ -64,6 +92,7 @@ export const job = pgTable('job', {
   /** Experience level required for this role */
   experienceLevel: experienceLevelEnum('experience_level'),
   // ── Application form settings ──
+  phoneRequirement: text('phone_requirement').$type<'hidden' | 'optional' | 'required'>().notNull().default('optional'),
   requireResume: boolean('require_resume').notNull().default(false),
   requireCoverLetter: boolean('require_cover_letter').notNull().default(false),
   // ── AI scoring settings ──
@@ -93,12 +122,30 @@ export const candidate = pgTable('candidate', {
   dateOfBirth: text('date_of_birth'),
   /** Quick notes visible inline on the candidates list */
   quickNotes: text('quick_notes'),
+  // ── GDPR retention / erasure lifecycle ──
+  /** When set and in the future, this candidate is exempt from automated retention deletion */
+  retentionExemptUntil: timestamp('retention_exempt_until'),
+  /** Documented justification for the exemption (legal hold, active dispute, etc.) */
+  retentionExemptReason: text('retention_exempt_reason'),
+  /**
+   * When an admin last manually reviewed/restored this candidate. Acts as a
+   * fresh retention anchor: restoring from quarantine sets this to now so the
+   * candidate gets a full retention window again instead of being re-quarantined
+   * on the next sweep. NULL = never manually reviewed.
+   */
+  retentionReviewedAt: timestamp('retention_reviewed_at'),
+  /** When the candidate entered the recoverable quarantine window. NULL = not quarantined. */
+  quarantinedAt: timestamp('quarantined_at'),
+  /** When a quarantined candidate becomes eligible for permanent erasure */
+  scheduledPurgeAt: timestamp('scheduled_purge_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ([
   index('candidate_organization_id_idx').on(t.organizationId),
   index('candidate_gender_idx').on(t.organizationId, t.gender),
   uniqueIndex('candidate_org_email_idx').on(t.organizationId, t.email),
+  // Drives the retention cron's quarantine → purge sweep efficiently.
+  index('candidate_quarantine_idx').on(t.organizationId, t.scheduledPurgeAt),
 ]))
 
 /**
@@ -266,10 +313,60 @@ export const orgSettings = pgTable('org_settings', {
   nameDisplayFormat: nameDisplayFormatEnum('name_display_format').notNull().default('first_last'),
   /** Controls the date display format across the app */
   dateFormat: dateFormatEnum('date_format').notNull().default('mdy'),
+  // ── GDPR retention policy ──
+  /** Master switch — when false, no automated retention deletion runs for this org */
+  retentionEnabled: boolean('retention_enabled').notNull().default(false),
+  /** Months of inactivity (since latest recruitment process ends) before erasure */
+  retentionMonths: integer('retention_months').notNull().default(24),
+  /** Days a candidate stays recoverable in quarantine before permanent erasure */
+  quarantineDays: integer('quarantine_days').notNull().default(30),
+  /** First time retention was enabled — anchors the review window so existing data
+   *  is never deleted immediately. NULL until the org first enables retention. */
+  retentionActivatedAt: timestamp('retention_activated_at'),
+  // ── Application-form privacy notice (org-configurable) ──
+  privacyPolicyUrl: text('privacy_policy_url'),
+  privacyPolicyText: text('privacy_policy_text'),
+  privacyContactEmail: text('privacy_contact_email'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ([
   uniqueIndex('org_settings_organization_id_idx').on(t.organizationId),
+]))
+
+// ─────────────────────────────────────────────
+// GDPR Retention Audit
+// ─────────────────────────────────────────────
+
+export const retentionAuditActionEnum = pgEnum('retention_audit_action', [
+  'quarantined', 'restored', 'erased', 'exempted', 'unexempted', 'exported',
+])
+
+/**
+ * Privacy-safe audit trail for retention & erasure actions.
+ *
+ * Deliberately stores NO personal data — no names, emails, filenames, resume
+ * content, or storage keys. `candidateId` is an opaque UUID kept as proof that a
+ * specific record was handled; it is not personal data once the candidate is gone.
+ * Lives in its own table (not `activity_log`) so it survives candidate erasure,
+ * which deletes the candidate's `activity_log` rows.
+ */
+export const retentionAudit = pgTable('retention_audit', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  /** Opaque candidate UUID — intentionally NOT a foreign key so it outlives erasure. */
+  candidateId: text('candidate_id').notNull(),
+  action: retentionAuditActionEnum('action').notNull(),
+  /** Outcome marker: 'success' | 'partial' | 'failed' | 'dry_run'. */
+  result: text('result').notNull().default('success'),
+  /** Triggering user id, or null for scheduled cron runs. Opaque id, not PII. */
+  actorId: text('actor_id'),
+  /** Non-PII counts only (e.g. { documents: 2, comments: 1, s3Failures: 0 }). */
+  metadata: jsonb('metadata').$type<Record<string, number | string>>(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ([
+  index('retention_audit_organization_id_idx').on(t.organizationId),
+  index('retention_audit_candidate_id_idx').on(t.candidateId),
+  index('retention_audit_created_at_idx').on(t.createdAt),
 ]))
 
 // ─────────────────────────────────────────────
@@ -481,6 +578,11 @@ export const analysisRunStatusEnum = pgEnum('analysis_run_status', [
   'completed', 'failed', 'partial',
 ])
 
+/** Who pays for an analysis run — see analysisRun.billingMode. */
+export const analysisBillingModeEnum = pgEnum('analysis_billing_mode', [
+  'platform', 'byok',
+])
+
 /**
  * Immutable audit trail for all significant actions within an organization.
  * Append-only — no UPDATE or DELETE allowed via the API.
@@ -690,6 +792,18 @@ export const analysisRun = pgTable('analysis_run', {
   /** Token usage for cost tracking */
   promptTokens: integer('prompt_tokens'),
   completionTokens: integer('completion_tokens'),
+  /**
+   * Frozen cost of this run in micro-dollars (1e-6 USD), computed at write time
+   * from the central price table (utils/ai/pricing.ts). Null when the model is
+   * unpriced. Summed by the budget gate; never recomputed from mutable config.
+   */
+  costUsdMicros: integer('cost_usd_micros'),
+  /**
+   * Who pays for this run: `platform` = our OpenRouter key (counts against the
+   * org's monthly budget + the global daily kill-switch); `byok` = the org's own
+   * API key (never budget-capped — it's their bill, we only track it).
+   */
+  billingMode: analysisBillingModeEnum('billing_mode').notNull().default('byok'),
   /** Raw LLM response for debugging (sanitized — no PII stored) */
   rawResponse: jsonb('raw_response'),
   errorMessage: text('error_message'),
@@ -704,6 +818,11 @@ export const analysisRun = pgTable('analysis_run', {
 // ─────────────────────────────────────────────
 // Relations
 // ─────────────────────────────────────────────
+
+export const onboardingSurveyResponseRelations = relations(onboardingSurveyResponse, ({ one }) => ({
+  user: one(user, { fields: [onboardingSurveyResponse.userId], references: [user.id] }),
+  organization: one(organization, { fields: [onboardingSurveyResponse.organizationId], references: [organization.id] }),
+}))
 
 export const jobRelations = relations(job, ({ one, many }) => ({
   organization: one(organization, { fields: [job.organizationId], references: [organization.id] }),
@@ -832,6 +951,10 @@ export const applicationSourceRelations = relations(applicationSource, ({ one })
 
 export const orgSettingsRelations = relations(orgSettings, ({ one }) => ({
   organization: one(organization, { fields: [orgSettings.organizationId], references: [organization.id] }),
+}))
+
+export const retentionAuditRelations = relations(retentionAudit, ({ one }) => ({
+  organization: one(organization, { fields: [retentionAudit.organizationId], references: [organization.id] }),
 }))
 
 // ─────────────────────────────────────────────

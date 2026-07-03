@@ -44,5 +44,22 @@ export function useTrack() {
     })
   }
 
-  return { track, captureError }
+  /**
+   * Attach properties to the current PostHog *person* profile.
+   *
+   * Logged-in users are always identified by their opaque `user.id`
+   * (see usePostHogIdentity), so these properties persist on the user's
+   * account profile in PostHog even for visitors who never accepted
+   * cookies. Use this for durable, account-level segmentation data
+   * (e.g. onboarding survey answers) rather than per-event context.
+   */
+  function setPersonProperties(properties: Record<string, unknown>) {
+    if (!import.meta.client) return
+    const ph = getPostHog()
+    if (!ph) return
+
+    ph.setPersonProperties(properties)
+  }
+
+  return { track, captureError, setPersonProperties }
 }

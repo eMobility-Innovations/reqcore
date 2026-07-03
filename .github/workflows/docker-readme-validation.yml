@@ -165,20 +165,27 @@ jobs:
         id: db_migrations
         run: |
           set -euo pipefail
-          if ! docker compose logs app | grep -q "Database migrations applied successfully"; then
-            echo "❌ Migration success message not found in app logs"
-            docker compose logs app
-            exit 1
-          fi
-          echo "✅ Migrations applied successfully"
+          for i in $(seq 30); do
+            logs="$(docker compose logs app)"
+            if grep -q "Database migrations applied successfully" <<<"$logs"; then
+              echo "✅ Migrations applied successfully"
+              exit 0
+            fi
+            echo "  attempt $i/30 — waiting for migration success log..."
+            sleep 2
+          done
+          echo "❌ Migration success message not found in app logs"
+          printf '%s\n' "$logs"
+          exit 1
 
       - name: Assert S3 bucket is ready
         id: s3_bucket
         run: |
           set -euo pipefail
-          if ! docker compose logs app | grep -q 'S3 bucket "reqcore" is ready'; then
+          logs="$(docker compose logs app)"
+          if ! grep -q 'S3 bucket "reqcore" is ready' <<<"$logs"; then
             echo "❌ S3 bucket ready message not found in app logs"
-            docker compose logs app
+            printf '%s\n' "$logs"
             exit 1
           fi
           echo "✅ S3 bucket is ready"
@@ -406,6 +413,7 @@ jobs:
       - name: Upload JUnit XML results
         uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: docker-integration-junit
           path: docker-integration-results.xml

@@ -3,11 +3,16 @@
  *
  * Flow:
  *   marketing site "Use Cloud" → GET /api/auth/demo-fresh-signup → this handler
+ *   pricing plan click (demo session) → guest middleware → this handler
  *
  * Behaviour:
  *   - No session           → redirect to /auth/sign-up
  *   - Demo account session → sign out, then redirect to /auth/sign-up
  *   - Any other account    → redirect to /dashboard (already logged in)
+ *
+ * The signup-intent query params (plan/billing/invitation) are forwarded
+ * onto the /auth/sign-up redirect so a visitor who picked a plan from the
+ * pricing page keeps that selection through the demo sign-out.
  *
  * Demo detection uses the user email (liveDemoEmail runtime config,
  * defaults to demo@reqcore.com).
@@ -17,11 +22,24 @@
  * session from the DB, and returns Set-Cookie headers to clear auth
  * cookies. We forward those headers into our 302 redirect.
  */
+function signUpRedirectTarget(event: Parameters<typeof getQuery>[0]): string {
+  const query = getQuery(event)
+  const params = new URLSearchParams()
+
+  for (const key of ['plan', 'billing', 'annual', 'invitation'] as const) {
+    const value = query[key]
+    if (typeof value === 'string' && value) params.set(key, value)
+  }
+
+  const qs = params.toString()
+  return qs ? `/auth/sign-up?${qs}` : '/auth/sign-up'
+}
+
 export default defineEventHandler(async (event) => {
   const session = await auth.api.getSession({ headers: event.headers })
 
   if (!session) {
-    return sendRedirect(event, '/auth/sign-up')
+    return sendRedirect(event, signUpRedirectTarget(event))
   }
 
   const demoEmail = (useRuntimeConfig().public.liveDemoEmail as string) || 'demo@reqcore.com'
@@ -41,5 +59,5 @@ export default defineEventHandler(async (event) => {
     appendResponseHeader(event, 'set-cookie', cookie)
   }
 
-  return sendRedirect(event, '/auth/sign-up')
+  return sendRedirect(event, signUpRedirectTarget(event))
 })

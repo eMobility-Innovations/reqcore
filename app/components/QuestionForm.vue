@@ -51,6 +51,7 @@ const isSelectType = computed(() =>
 )
 
 function addOption() {
+  if (form.value.options.length >= 50) return
   form.value.options.push('')
 }
 
@@ -65,12 +66,22 @@ function validate(): boolean {
 
   if (!form.value.label.trim()) {
     errors.value.label = 'Question label is required'
+  } else if (form.value.label.trim().length > 500) {
+    errors.value.label = 'Question label must be 500 characters or less'
+  }
+
+  if (form.value.description.trim().length > 1000) {
+    errors.value.description = 'Help text must be 1,000 characters or less'
   }
 
   if (isSelectType.value) {
-    const nonEmpty = form.value.options.filter((o) => o.trim())
+    const nonEmpty = form.value.options.map(o => o.trim()).filter(Boolean)
     if (nonEmpty.length === 0) {
       errors.value.options = 'At least one option is required for select questions'
+    } else if (nonEmpty.some(option => option.length > 200)) {
+      errors.value.options = 'Options must be 200 characters or less'
+    } else if (new Set(nonEmpty.map(option => option.toLocaleLowerCase())).size !== nonEmpty.length) {
+      errors.value.options = 'Options must be unique'
     }
   }
 
@@ -133,6 +144,7 @@ const isEditing = computed(() => !!props.question)
           id="q-label"
           v-model="form.label"
           type="text"
+          maxlength="500"
           placeholder="e.g. How many years of experience do you have?"
           class="w-full rounded-lg border px-3 py-2 text-sm text-surface-900 dark:text-surface-100 bg-white dark:bg-surface-800 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
           :class="errors.label ? 'border-danger-300' : 'border-surface-300 dark:border-surface-700'"
@@ -165,9 +177,11 @@ const isEditing = computed(() => !!props.question)
           id="q-desc"
           v-model="form.description"
           type="text"
+          maxlength="1000"
           placeholder="Additional context shown below the field"
           class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm text-surface-900 dark:text-surface-100 bg-white dark:bg-surface-800 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
         />
+        <p v-if="errors.description" class="mt-1 text-xs text-danger-600 dark:text-danger-400">{{ errors.description }}</p>
       </div>
 
       <!-- Options (for select types) -->
@@ -180,6 +194,7 @@ const isEditing = computed(() => !!props.question)
             <input
               v-model="form.options[index]"
               type="text"
+              maxlength="200"
               :placeholder="`Option ${index + 1}`"
               class="flex-1 rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-1.5 text-sm text-surface-900 dark:text-surface-100 bg-white dark:bg-surface-800 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
             />
@@ -195,6 +210,7 @@ const isEditing = computed(() => !!props.question)
         </div>
         <button
           type="button"
+          :disabled="form.options.length >= 50"
           class="mt-2 inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 transition-colors"
           @click="addOption"
         >

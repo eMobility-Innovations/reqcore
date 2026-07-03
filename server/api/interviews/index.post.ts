@@ -2,12 +2,22 @@ import { and, eq } from 'drizzle-orm'
 import { interview, application, candidate, job, organization } from '../../database/schema'
 import { createInterviewSchema } from '../../utils/schemas/interview'
 import { createCalendarEvent } from '../../utils/google-calendar'
+import { tierHasFeature } from '../../../shared/billing'
 
 export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { interview: ['create'] })
   const orgId = session.session.activeOrganizationId
 
+  // Interview scheduling is a Solo+ feature. Resolve the tier once and reuse it
+  // for the Team+ calendar-sync sub-gate below.
+  const tier = await assertPlanFeature(orgId, 'interviews')
+
   const body = await readValidatedBody(event, createInterviewSchema.parse)
+
+  // Calendar (Google) sync is a Team+ feature. An explicit opt-in from a tier
+  // that can't use it is a hard 402; otherwise we just skip the sync silently.
+  const canSyncCalendar = tierHasFeature(tier, 'calendar')
+  if (body.calendarSync === true) assertTierFeature(tier, 'calendar')
 
   // Verify the application exists and belongs to this org
   const app = await db.query.application.findFirst({
@@ -48,7 +58,7 @@ export default defineEventHandler(async (event) => {
   let calendarEventLink: string | null = null
   let calendarEventId: string | null = null
 
-  if (body.calendarSync !== false && app.candidate && app.job) {
+  if (body.calendarSync !== false && canSyncCalendar && app.candidate && app.job) {
     const org = await db.query.organization.findFirst({
       where: eq(organization.id, orgId),
       columns: { name: true },

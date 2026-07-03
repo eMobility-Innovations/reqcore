@@ -63,10 +63,18 @@ export function useSourceTracking(options?: {
   jobId?: Ref<string | undefined> | string
   from?: Ref<string | undefined> | string
   to?: Ref<string | undefined> | string
+  /**
+   * Gate the stats request. The source-attribution dashboard is a Team+
+   * entitlement, so the page passes the plan check here to avoid firing a
+   * doomed 402 at the gated endpoint for orgs that can't access it. Defaults
+   * to enabled when omitted.
+   */
+  enabled?: Ref<boolean> | boolean
 }) {
   const jobId = computed(() => toValue(options?.jobId))
   const from = computed(() => toValue(options?.from))
   const to = computed(() => toValue(options?.to))
+  const enabled = computed(() => toValue(options?.enabled) ?? true)
 
   // ─── Source stats ─────────────────────────
   const statsUrl = computed(() => {
@@ -83,9 +91,20 @@ export function useSourceTracking(options?: {
     status: statsStatus,
     error: statsError,
     refresh: refreshStats,
+    execute: executeStats,
   } = useFetch<SourceStats>(statsUrl, {
     headers: useRequestHeaders(['cookie']),
+    // Drive fetching manually so we only hit the gated endpoint once the org
+    // is known to be entitled (and on filter changes thereafter).
+    immediate: false,
+    watch: false,
   })
+
+  watch(
+    [enabled, statsUrl],
+    () => { if (enabled.value) executeStats() },
+    { immediate: true },
+  )
 
   const channelBreakdown = computed(() => stats.value?.channelBreakdown ?? [])
   const topLinks = computed(() => stats.value?.topLinks ?? [])

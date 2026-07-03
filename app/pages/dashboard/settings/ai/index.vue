@@ -47,6 +47,13 @@ interface ProviderInfo {
 const { allowed: canManageAi, isLoading: isPermissionLoading } = usePermission({ scoring: ['create'] })
 const toast = useToast()
 
+// Bring-your-own AI key (adding a model) is available on Free (to go past the
+// free run limit) and Scale+. Solo/Team don't get it. Existing configs stay
+// usable/editable on any plan; only creating new ones is locked.
+const { hasFeature } = usePlanFeature()
+const canUseByok = computed(() => hasFeature('byok'))
+const canAddModel = computed(() => canManageAi.value && canUseByok.value)
+
 const { data: configsData, refresh: refreshConfigs, status: configsStatus } = useFetch<AiConfigRow[]>('/api/ai-config', {
   key: 'ai-configs',
   headers: useRequestHeaders(['cookie']),
@@ -144,7 +151,7 @@ function formatPrice(p: number | null): string {
         </p>
       </div>
       <NuxtLink
-        v-if="canManageAi"
+        v-if="canAddModel"
         to="/dashboard/settings/ai/new"
         class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
       >
@@ -152,6 +159,9 @@ function formatPrice(p: number | null): string {
         Add a model
       </NuxtLink>
     </div>
+
+    <!-- BYOK is available on Free and Scale+ (not Solo/Team). Existing configs still work; adding is locked otherwise. -->
+    <FeatureLockCard v-if="canManageAi && !canUseByok" feature="byok" class="mb-6" />
 
     <!-- Permission guard -->
     <div v-if="isPermissionLoading" class="flex items-center justify-center py-12">
@@ -188,6 +198,7 @@ function formatPrice(p: number | null): string {
         Add your first model to enable the chatbot and candidate analysis. Pick from popular providers or bring your own OpenAI-compatible endpoint.
       </p>
       <NuxtLink
+        v-if="canAddModel"
         to="/dashboard/settings/ai/new"
         class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
       >

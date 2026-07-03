@@ -1,0 +1,30 @@
+Reqcore Enterprise Edition License
+
+Copyright (c) 2026-present Reqcore Inc. All rights reserved.
+
+This directory ("Enterprise Edition" or "ee/") is source-available, but it is
+NOT open source and is NOT covered by the GNU Affero General Public License
+(AGPLv3) that applies to the rest of this repository.
+
+1. Grant. Subject to the terms below, Reqcore Inc. grants you a
+   non-exclusive, non-transferable, revocable license to view and modify the
+   source code in this directory for the purpose of evaluation, local
+   development, and contributing changes back to Reqcore.
+
+2. Restrictions. Without a separate written commercial agreement with
+   Reqcore Inc., you may NOT:
+   a. run, deploy, or otherwise use this code in production, whether for
+      your own internal use or on behalf of a third party;
+   b. offer this code, or any product or service derived from it, to third
+      parties, whether for a fee or for free, including as a hosted or
+      managed service;
+   c. remove or alter licensing notices in this directory.
+
+3. No warranty. This code is provided "as is", without warranty of any
+   kind, express or implied.
+
+4. Contact. For a commercial license, contact Reqcore Inc.
+
+This license applies only to the contents of the `ee/` directory. All other
+code in this repository remains licensed under the AGPLv3 — see the root
+[LICENSE](../LICENSE) file.

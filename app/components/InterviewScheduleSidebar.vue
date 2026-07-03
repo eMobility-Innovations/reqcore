@@ -28,6 +28,13 @@ const createdInterview = ref<{ id: string; googleCalendarEventLink?: string | nu
 // ─── Calendar integration status ──────────────────────────────────
 const { isConnected: calendarConnected } = useCalendarIntegration()
 
+// ─── Plan entitlement ─────────────────────────────────────────────
+// Scheduling an interview is a Solo+ feature (server gates POST /api/interviews).
+// Moving the application to the interview stage stays available on every plan,
+// so a free org still gets the "skip scheduling" path below.
+const { hasFeature } = usePlanFeature()
+const canScheduleInterviews = computed(() => hasFeature('interviews'))
+
 // ─── Form state ───────────────────────────────────────────────────
 const form = reactive({
   title: '',
@@ -496,8 +503,24 @@ async function handleMoveToInterview() {
 
           <!-- ─── Form view ────────────────────────────────────── -->
           <template v-else>
+          <!-- Locked: scheduling needs Solo+ -->
+          <template v-if="!canScheduleInterviews">
+            <div class="flex-1 overflow-y-auto px-6 py-6">
+              <FeatureLockCard feature="interviews" />
+            </div>
+            <div class="shrink-0 border-t border-surface-200/60 dark:border-surface-800/40 bg-white/80 dark:bg-surface-900/80 backdrop-blur-sm px-6 py-4">
+              <button
+                type="button"
+                class="w-full rounded-xl border border-surface-200 dark:border-surface-700 px-4 py-2.5 text-sm font-medium text-surface-600 dark:text-surface-400 hover:text-surface-800 hover:bg-surface-50 dark:hover:text-surface-200 dark:hover:bg-surface-800 transition-colors cursor-pointer"
+                @click="emit('close')"
+              >
+                Close
+              </button>
+            </div>
+          </template>
+
           <!-- Form content -->
-          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          <div v-else class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
             <!-- Error banner -->
             <div v-if="errors.submit" class="flex items-start gap-2.5 rounded-xl border border-danger-200/60 bg-danger-50/80 p-3.5 text-sm text-danger-700 dark:border-danger-800/40 dark:bg-danger-950/30 dark:text-danger-300">
               <AlertCircle class="size-4 shrink-0 mt-0.5" />
@@ -947,6 +970,7 @@ async function handleMoveToInterview() {
                 Cancel
               </button>
               <button
+                v-if="canScheduleInterviews"
                 type="button"
                 :disabled="isSubmitting || isMoving"
                 class="flex-[1.5] rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-sm shadow-brand-600/20 dark:shadow-brand-500/10"

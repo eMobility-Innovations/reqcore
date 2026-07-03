@@ -7,6 +7,8 @@ import type { PropertyFilter } from '~~/shared/properties'
  * Wraps `useFetch('/api/candidates')` with a singleton key for shared state.
  */
 export function useCandidates(options?: {
+  page?: Ref<number | undefined> | number
+  limit?: Ref<number | undefined> | number
   search?: Ref<string | undefined> | string
   gender?: Ref<string | undefined> | string
   dobFrom?: Ref<string | undefined> | string
@@ -18,6 +20,8 @@ export function useCandidates(options?: {
   const query = computed(() => {
     const pf = toValue(options?.propertyFilters)
     return {
+      ...(toValue(options?.page) && { page: toValue(options?.page) }),
+      ...(toValue(options?.limit) && { limit: toValue(options?.limit) }),
       ...(toValue(options?.search) && { search: toValue(options?.search) }),
       ...(toValue(options?.gender) && { gender: toValue(options?.gender) }),
       ...(toValue(options?.dobFrom) && { dobFrom: toValue(options?.dobFrom) }),

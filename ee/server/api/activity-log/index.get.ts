@@ -1,6 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm'
-import { activityLog, user } from '../../database/schema'
-import { activityLogQuerySchema } from '../../utils/schemas/activityLog'
+import { activityLog, user } from '~~/server/database/schema'
+import { activityLogQuerySchema } from '~~/server/utils/schemas/activityLog'
 
 /**
  * GET /api/activity-log
@@ -11,6 +11,10 @@ import { activityLogQuerySchema } from '../../utils/schemas/activityLog'
 export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { activityLog: ['read'] })
   const orgId = session.session.activeOrganizationId
+
+  // The org-wide audit log is a Scale+ feature. (The dashboard activity feed and
+  // the per-candidate timeline read the same table but are core UI on every plan.)
+  await assertPlanFeature(orgId, 'auditLog')
 
   const query = await getValidatedQuery(event, activityLogQuerySchema.parse)
   const offset = (query.page - 1) * query.limit

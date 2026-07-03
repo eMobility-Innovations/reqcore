@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures'
+import { test, expect, declineAnalyticsConsent } from '../fixtures'
 
 /**
  * Critical flow: Source tracking query parameters (?ref=, utm_*) propagate
@@ -67,6 +67,7 @@ test.describe('Source Tracking — Query Parameter Propagation', () => {
     // ── Step 2: Candidate navigates from job listing with tracking params ──────
 
     const candidateContext = await browser.newContext()
+    await declineAnalyticsConsent(candidateContext)
     const candidatePage = await candidateContext.newPage()
 
     const REF_CODE = 'TRACK_E2E_123'

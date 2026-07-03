@@ -2,7 +2,7 @@
 
 ## Overview
 
-Reqcore is a **Nuxt 4** full-stack application following a monolithic architecture with clear separation between client (`app/`) and server (`server/`) code. The system supports both **managed deployment** on Railway and **self-hosted deployment** via Docker Compose.
+Reqcore is a **Nuxt 4** full-stack application following a monolithic architecture with clear separation between client (`app/`) and server (`server/`) code. Reqcore is open-source and self-hostable; Docker Compose is the reference deployment path for running the app with Postgres and S3-compatible object storage.
 
 ## Technology Stack
 
@@ -20,7 +20,7 @@ Reqcore is a **Nuxt 4** full-stack application following a monolithic architectu
 | SEO | `@nuxtjs/seo` (Sitemap, Robots, Schema.org, SEO Utils, Site Config) | Search engine optimization, structured data |
 | Content | `@nuxt/content` v3 | Markdown blog engine with typed collections |
 | Infrastructure | Docker Compose (local dev) | Local Postgres, MinIO, Adminer |
-| Hosting | Railway | Managed platform (auto-build, auto-deploy) |
+| Hosting | Docker Compose / Railway-compatible platforms | Self-hosted or managed deployment |
 | CDN | Cloudflare (Free) | DNS, DDoS protection, edge caching |
 
 ## Directory Structure
@@ -98,6 +98,7 @@ reqcore/
 │           └── application.ts    # Application schemas
 ├── content/                      # Markdown content (@nuxt/content v3)
 │   └── blog/                     # Blog articles (*.md with YAML frontmatter)
+├── ee/                           # Enterprise Edition — separate license (see ee/LICENSE), a Nuxt layer merged in via `extends`
 ├── public/                       # Static assets
 ├── docker-compose.yml            # Postgres + MinIO + Adminer
 ├── drizzle.config.ts             # Drizzle Kit configuration
@@ -264,40 +265,44 @@ Blog articles are Markdown files in `content/blog/` powered by `@nuxt/content` v
 | Environment secrets | Validated at startup, never exposed to client |
 ## Deployment Architecture
 
-Reqcore runs on **Railway** with **Cloudflare** as CDN/DNS:
+Reqcore can run as a Docker Compose stack or on a managed container platform. The app expects PostgreSQL and S3-compatible object storage.
 
 | Component | Role |
 |-----------|------|
-| Cloudflare (Free) | DNS, DDoS protection, SSL edge termination, AI bot blocking |
-| Railway Service | Nuxt SSR app (auto-built from GitHub via Nixpacks) |
-| Railway PostgreSQL | Managed Postgres database with automatic backups |
-| Railway Storage Bucket | S3-compatible object storage for documents |
+| Reverse proxy / CDN | DNS, TLS termination, DDoS protection |
+| Nuxt SSR app | Web UI and Nitro API server |
+| PostgreSQL | Application database |
+| S3-compatible storage | Uploaded resumes and documents |
 
 ### Deploy Workflow
 
 ```bash
-# Push to main branch — Railway auto-builds and deploys
-git push origin main
-
-# Build: npm run build (detected from package.json)
-# Start: node .output/server/index.mjs
+./setup.sh
+docker compose -f docker-compose.production.yml up -d
 ```
 
-### Environment Variables on Railway
+Managed platforms such as Railway can also build from source:
 
-Variables are configured in the Railway dashboard or via `railway variables`. Service-to-service references use Railway's template syntax:
+```bash
+npm run build
+node .output/server/index.mjs
+```
+
+### Environment Variables
+
+Configure these variables through `.env`, Docker Compose, or your hosting provider's environment-variable UI:
 
 | Variable | Source |
 |----------|--------|
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
-| `S3_ENDPOINT` | `${{Bucket.ENDPOINT}}` |
-| `S3_ACCESS_KEY` | `${{Bucket.ACCESS_KEY_ID}}` |
-| `S3_SECRET_KEY` | `${{Bucket.SECRET_ACCESS_KEY}}` |
-| `S3_BUCKET` | `${{Bucket.BUCKET}}` |
-| `S3_REGION` | `${{Bucket.REGION}}` |
-| `S3_FORCE_PATH_STYLE` | `false` |
-| `BETTER_AUTH_SECRET` | Manual (sealed) |
-| `BETTER_AUTH_URL` | Production: `https://reqcore.com` · PR/preview: `https://${{RAILWAY_PUBLIC_DOMAIN}}` |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `S3_ENDPOINT` | S3-compatible API endpoint |
+| `S3_ACCESS_KEY` | S3 access key |
+| `S3_SECRET_KEY` | S3 secret key |
+| `S3_BUCKET` | Bucket name |
+| `S3_REGION` | Bucket region |
+| `S3_FORCE_PATH_STYLE` | `true` for MinIO, `false` for virtual-hosted providers |
+| `BETTER_AUTH_SECRET` | Random secret, at least 32 characters |
+| `BETTER_AUTH_URL` | Public URL of your deployment |
 
 For zero manual PR setup, define `BETTER_AUTH_URL` as `https://${{RAILWAY_PUBLIC_DOMAIN}}` in your Railway preview/PR environment (or shared variables scoped to previews).
 ## Local Development Services

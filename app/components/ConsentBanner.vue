@@ -13,18 +13,18 @@ const { needsConsent, acceptAnalytics, declineAnalytics } = useAnalyticsConsent(
   >
     <div
       v-if="needsConsent"
-      class="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-white/10 bg-zinc-900/95 px-4 py-3 shadow-2xl backdrop-blur-md sm:right-6 sm:bottom-6"
+      class="fixed inset-x-4 bottom-4 z-50 max-w-sm rounded-lg border border-surface-200 bg-white/95 px-4 py-3 shadow-2xl shadow-surface-900/10 backdrop-blur-md dark:border-surface-700 dark:bg-surface-900/95 dark:shadow-black/30 sm:inset-x-auto sm:right-6 sm:bottom-6"
     >
-      <p class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">A small ask</p>
-      <p class="text-[13px] leading-relaxed text-white/70">
+      <p class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">A small ask</p>
+      <p class="text-[13px] leading-relaxed text-surface-700 dark:text-surface-300">
         Help us improve reqcore. No ads, no data selling, just product insights.
       </p>
-      <p class="mt-1.5 text-[12px] text-white/40">
+      <p class="mt-1.5 text-[12px] text-surface-500 dark:text-surface-400">
         <a
           :href="`${useRuntimeConfig().public.marketingUrl}/docs/legal/privacy-policy`"
           target="_blank"
           rel="noopener noreferrer"
-          class="underline underline-offset-2 transition hover:text-white/70"
+          class="underline underline-offset-2 transition hover:text-surface-800 dark:hover:text-surface-200"
         >
           Privacy policy
         </a>
@@ -32,14 +32,14 @@ const { needsConsent, acceptAnalytics, declineAnalytics } = useAnalyticsConsent(
       <div class="mt-3 flex gap-2">
         <button
           type="button"
-          class="rounded-md px-3 py-1.5 text-xs font-medium text-white/40 transition hover:text-white/70"
+          class="rounded-md px-3 py-1.5 text-xs font-medium text-surface-500 transition hover:bg-surface-100 hover:text-surface-800 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-200"
           @click="declineAnalytics"
         >
           No thanks
         </button>
         <button
           type="button"
-          class="rounded-md bg-indigo-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-400"
+          class="rounded-md bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm shadow-brand-500/20 transition hover:bg-brand-700"
           @click="acceptAnalytics"
         >
           Sure, help improve it

@@ -303,23 +303,6 @@ const statusCounts = computed(() => {
 
 <template>
   <div class="mx-auto max-w-5xl">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-50">Interviews</h1>
-        <p class="mt-1 text-sm text-surface-500 dark:text-surface-400">
-          Manage all scheduled interviews across your jobs
-        </p>
-      </div>
-      <NuxtLink
-        :to="$localePath('/dashboard/interviews/templates')"
-        class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors no-underline"
-      >
-        <Mail class="size-4" />
-        Email Templates
-      </NuxtLink>
-    </div>
-
     <!-- Status filter pills + search -->
     <div class="flex flex-wrap items-center gap-3 mb-5">
       <!-- Search -->
@@ -379,6 +362,14 @@ const statusCounts = computed(() => {
           Timeline
         </button>
       </div>
+
+      <NuxtLink
+        :to="$localePath('/dashboard/interviews/templates')"
+        class="inline-flex items-center gap-1.5 rounded-lg border border-surface-200 dark:border-surface-700/80 bg-white dark:bg-surface-900 px-3 py-2 text-xs font-medium text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors no-underline"
+      >
+        <Mail class="size-3.5" />
+        Email Templates
+      </NuxtLink>
     </div>
 
     <!-- Loading state -->

@@ -17,6 +17,8 @@ import { requireChatbotAccess } from '../../utils/chatbotAccess'
 import { extractChatbotSources } from '../../utils/chatbotSources'
 import { createRateLimiter } from '../../utils/rateLimit'
 import { trackEvent } from '../../utils/trackEvent'
+import { captureAiGeneration } from '../../utils/ai/observability'
+import { computeCostUsdMicros } from '../../utils/ai/pricing'
 import {
   CHATBOT_MAX_ATTACHMENTS_PER_MESSAGE,
   CHATBOT_MAX_MESSAGES,
@@ -257,12 +259,14 @@ export default defineEventHandler(async (event) => {
     'X-Accel-Buffering': 'no',
   })
 
+  const startedAt = Date.now()
   const result = streamText({
     model,
     system: buildSystemPrompt(scopeLabel, agentPrompt),
     messages: modelMessages,
     tools,
     stopWhen: stepCountIs(8),
+    maxOutputTokens: Math.max(config.maxTokens, 2048),
     temperature: agentTemperature ?? 0.2,
     ...(body.thinking
       ? { providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 4000 } } } }
@@ -282,6 +286,9 @@ export default defineEventHandler(async (event) => {
   const seenSourceIds = new Set<string>()
   const sources: ChatbotSource[] = []
   let finishedCleanly = false
+  // Captured at the stream's `finish` part so we can emit one $ai_generation
+  // event covering all steps of this turn (tool calls + the final answer).
+  let finalUsage: { prompt: number, completion: number, reasoning?: number, cached?: number } | null = null
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -365,11 +372,17 @@ export default defineEventHandler(async (event) => {
               break
             case 'finish': {
               finishedCleanly = true
+              finalUsage = {
+                prompt: part.totalUsage.inputTokens ?? 0,
+                completion: part.totalUsage.outputTokens ?? 0,
+                reasoning: part.totalUsage.reasoningTokens ?? undefined,
+                cached: part.totalUsage.cachedInputTokens ?? undefined,
+              }
               writeEvent(controller, {
                 type: 'finish',
                 usage: {
-                  promptTokens: part.totalUsage.inputTokens ?? 0,
-                  completionTokens: part.totalUsage.outputTokens ?? 0,
+                  promptTokens: finalUsage.prompt,
+                  completionTokens: finalUsage.completion,
                 },
               })
               break
@@ -423,6 +436,30 @@ export default defineEventHandler(async (event) => {
           // Persistence failures must not crash the stream — log loudly.
           console.error('[chatbot] failed to persist assistant message', persistErr)
         }
+
+        // PostHog LLM observability. The chatbot always runs on the org's own
+        // AI config (loadAiConfig never returns the platform key), so it is
+        // always BYOK. One event per turn, grouped under the conversation trace.
+        captureAiGeneration({
+          orgId,
+          userId: session.user.id,
+          conversationId: conversation.id,
+          traceId: conversation.id,
+          feature: 'chatbot_message',
+          provider: config.provider,
+          model: config.model,
+          billingMode: 'byok',
+          promptTokens: finalUsage?.prompt ?? 0,
+          completionTokens: finalUsage?.completion ?? 0,
+          reasoningTokens: finalUsage?.reasoning,
+          cacheReadTokens: finalUsage?.cached,
+          costUsdMicros: finalUsage
+            ? computeCostUsdMicros(config.model, finalUsage.prompt, finalUsage.completion)
+            : null,
+          latencyMs: Date.now() - startedAt,
+          status: finalUsage ? 'completed' : 'failed',
+        })
+
         controller.close()
       }
     },

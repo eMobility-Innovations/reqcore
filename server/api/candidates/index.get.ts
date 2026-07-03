@@ -1,4 +1,4 @@
-import { eq, and, or, ilike, desc, sql, gte, lte, inArray } from 'drizzle-orm'
+import { eq, and, or, ilike, desc, sql, gte, lte, inArray, isNull } from 'drizzle-orm'
 import { candidate, application } from '../../database/schema'
 import { candidateQuerySchema } from '../../utils/schemas/candidate'
 import { propertyFiltersArraySchema } from '../../utils/schemas/property'
@@ -15,7 +15,9 @@ export default defineEventHandler(async (event) => {
   const query = await getValidatedQuery(event, candidateQuerySchema.parse)
 
   const offset = (query.page - 1) * query.limit
-  const conditions = [eq(candidate.organizationId, orgId)]
+  // Quarantined candidates (pending GDPR erasure) are hidden from the main list;
+  // they're managed from the retention review screen in settings.
+  const conditions = [eq(candidate.organizationId, orgId), isNull(candidate.quarantinedAt)]
 
   if (query.search) {
     // Escape LIKE meta-characters to prevent pattern injection

@@ -150,6 +150,31 @@ export const envSchema = z
     AUTH_MICROSOFT_TENANT_ID: emptyToUndefined.pipe(z.string().min(1)).optional().default('common'),
     /** Shared secret for authenticating cron/scheduled job requests (e.g., webhook renewal). */
     CRON_SECRET: emptyToUndefined.pipe(z.string().min(16)).optional(),
+    /**
+     * Instance-wide master switch for automated GDPR retention processing.
+     * Fail-closed: defaults to OFF so an irreversible erasure sweep never runs
+     * unless an operator explicitly opts in with GDPR_CLEANUP_ENABLED=true.
+     * Organization-level `retentionEnabled` is a second, independent guard — both
+     * must be on for any candidate to be quarantined or erased. Setting this to
+     * false also serves as the instance-wide emergency pause.
+     */
+    GDPR_CLEANUP_ENABLED: z.preprocess(
+      val => val === undefined || val === '' ? false : val === true || val === 'true',
+      z.boolean().default(false),
+    ),
+    // ── Platform AI gateway (optional) ──────────────────────────
+    // When OPENROUTER_API_KEY is set, orgs without their own AI config fall back
+    // to our platform key, routed through OpenRouter for unified billing and
+    // analytics. Platform-paid runs are subject to the budget gate (utils/ai/
+    // budget.ts); BYOK orgs are unaffected. Leave unset to keep BYOK-only.
+    /** OpenRouter API key (sk-or-…). Enables platform-paid AI for orgs without their own key. */
+    OPENROUTER_API_KEY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Default model for platform-paid runs, OpenRouter-prefixed. Defaults to openai/gpt-4.1-mini. */
+    OPENROUTER_MODEL: emptyToUndefined.pipe(z.string().min(1)).optional().default('openai/gpt-4.1-mini'),
+    /** Global platform-wide daily AI spend cap in USD (runaway-loop kill-switch). Defaults to 25. */
+    AI_DAILY_SPEND_CAP_USD: emptyToUndefined
+      .pipe(z.string().regex(/^\d+(\.\d+)?$/, 'Must be a number'))
+      .optional(),
     /** OIDC client ID for SSO authentication (e.g., Keycloak, Authentik, Authelia, Okta). */
     OIDC_CLIENT_ID: emptyToUndefined.pipe(z.string().min(1)).optional(),
     /** OIDC client secret for SSO authentication. */
@@ -166,6 +191,27 @@ export const envSchema = z
       .pipe(z.string().min(1))
       .optional()
       .default("SSO"),
+
+    // ── Stripe Billing (optional) ───────────────────────────
+    // When STRIPE_SECRET_KEY is set, self-serve subscription checkout is enabled.
+    // All Stripe vars are all-or-none (enforced in superRefine below): leaving
+    // STRIPE_SECRET_KEY unset disables billing entirely (self-hosters unaffected).
+    /** Stripe secret API key (sk_test_… / sk_live_…). Enables the billing feature when set. */
+    STRIPE_SECRET_KEY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe webhook signing secret (whsec_…). Verifies authenticity of webhook events. */
+    STRIPE_WEBHOOK_SECRET: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Solo, monthly billing. */
+    STRIPE_PRICE_SOLO_MONTHLY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Solo, annual billing. */
+    STRIPE_PRICE_SOLO_ANNUAL: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Team, monthly billing. */
+    STRIPE_PRICE_TEAM_MONTHLY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Team, annual billing. */
+    STRIPE_PRICE_TEAM_ANNUAL: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Scale, monthly billing. */
+    STRIPE_PRICE_SCALE_MONTHLY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Scale, annual billing. */
+    STRIPE_PRICE_SCALE_ANNUAL: emptyToUndefined.pipe(z.string().min(1)).optional(),
   })
   .superRefine((data, ctx) => {
     // BETTER_AUTH_URL can be derived at runtime from RAILWAY_PUBLIC_DOMAIN,
@@ -206,7 +252,64 @@ export const envSchema = z
         });
       }
     }
+
+    // Stripe billing requires all vars or none. Partial config would otherwise
+    // disable billing/webhooks silently, leaving checkout state stale.
+    const stripeVars = [
+      ["STRIPE_SECRET_KEY", data.STRIPE_SECRET_KEY],
+      ["STRIPE_WEBHOOK_SECRET", data.STRIPE_WEBHOOK_SECRET],
+      ["STRIPE_PRICE_SOLO_MONTHLY", data.STRIPE_PRICE_SOLO_MONTHLY],
+      ["STRIPE_PRICE_SOLO_ANNUAL", data.STRIPE_PRICE_SOLO_ANNUAL],
+      ["STRIPE_PRICE_TEAM_MONTHLY", data.STRIPE_PRICE_TEAM_MONTHLY],
+      ["STRIPE_PRICE_TEAM_ANNUAL", data.STRIPE_PRICE_TEAM_ANNUAL],
+      ["STRIPE_PRICE_SCALE_MONTHLY", data.STRIPE_PRICE_SCALE_MONTHLY],
+      ["STRIPE_PRICE_SCALE_ANNUAL", data.STRIPE_PRICE_SCALE_ANNUAL],
+    ] as const;
+    const setStripeVars = stripeVars.filter(([, v]) => v);
+    const missingStripeVars = stripeVars.filter(([, v]) => !v);
+
+    if (setStripeVars.length > 0 && missingStripeVars.length > 0) {
+      for (const [name] of missingStripeVars) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [name],
+          message: `${name} is required when Stripe billing is partially configured. Set all Stripe billing variables or none.`,
+        });
+      }
+    }
+
   });
+
+export const STRIPE_BILLING_ENV_KEYS = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_PRICE_SOLO_MONTHLY",
+  "STRIPE_PRICE_SOLO_ANNUAL",
+  "STRIPE_PRICE_TEAM_MONTHLY",
+  "STRIPE_PRICE_TEAM_ANNUAL",
+  "STRIPE_PRICE_SCALE_MONTHLY",
+  "STRIPE_PRICE_SCALE_ANNUAL",
+] as const;
+
+type StripeBillingEnv = Partial<
+  Record<(typeof STRIPE_BILLING_ENV_KEYS)[number], string | undefined>
+>;
+
+export function getMissingStripeBillingVars(config: StripeBillingEnv): string[] {
+  const configuredCount = STRIPE_BILLING_ENV_KEYS.filter((key) =>
+    Boolean(config[key]),
+  ).length;
+
+  if (configuredCount === 0 || configuredCount === STRIPE_BILLING_ENV_KEYS.length) {
+    return [];
+  }
+
+  return STRIPE_BILLING_ENV_KEYS.filter((key) => !config[key]);
+}
+
+export function isStripeBillingConfigured(config: StripeBillingEnv): boolean {
+  return STRIPE_BILLING_ENV_KEYS.every((key) => Boolean(config[key]));
+}
 
 /**
  * Validated environment variables. Uses lazy initialization so the schema

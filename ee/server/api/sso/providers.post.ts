@@ -63,6 +63,9 @@ export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { organization: ['update'] })
   const orgId = session.session.activeOrganizationId
 
+  // SSO / SAML / SCIM is a Scale+ feature.
+  await assertPlanFeature(orgId, 'sso')
+
   const body = await readValidatedBody(event, registerSsoSchema.parse)
 
   // Prevent domain hijacking: reject if another org already registered this domain

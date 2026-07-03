@@ -1,6 +1,6 @@
 import { eq, and, sql, count, gte, lte, desc } from 'drizzle-orm'
-import { applicationSource, application, trackingLink, job, candidate } from '../../database/schema'
-import { sourceStatsQuerySchema } from '../../utils/schemas/trackingLink'
+import { applicationSource, application, trackingLink, job, candidate } from '~~/server/database/schema'
+import { sourceStatsQuerySchema } from '~~/server/utils/schemas/trackingLink'
 
 /**
  * GET /api/source-tracking/stats
@@ -14,6 +14,10 @@ import { sourceStatsQuerySchema } from '../../utils/schemas/trackingLink'
 export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { sourceTracking: ['read'], application: ['read'] })
   const orgId = session.session.activeOrganizationId
+
+  // Source attribution dashboard is a Team+ entitlement (tracking links
+  // themselves stay available on every plan; only the analytics view is gated).
+  await assertPlanFeature(orgId, 'sourceAnalytics')
 
   const query = await getValidatedQuery(event, sourceStatsQuerySchema.parse)
 

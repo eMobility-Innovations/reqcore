@@ -9,6 +9,7 @@ import { usePreviewReadOnly } from '~/composables/usePreviewReadOnly'
 const props = defineProps<{
   applicationId: string
   open: boolean
+  initialTab?: 'overview' | 'documents' | 'responses' | 'ai_analysis' | 'timeline'
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +20,7 @@ const emit = defineEmits<{
 const { handlePreviewReadOnlyError } = usePreviewReadOnly()
 const toast = useToast()
 const { track } = useTrack()
-const { formatCandidateName } = useOrgSettings()
+const { formatCandidateName, formatDateTime } = useOrgSettings()
 
 // Detect if the job sub-nav bar is visible (adds 40px / 2.5rem)
 const route = useRoute()
@@ -35,7 +36,13 @@ const hasSubNav = computed(() => {
 // Tabs
 // ─────────────────────────────────────────────
 
-const activeTab = ref<'overview' | 'documents' | 'responses' | 'ai_analysis' | 'timeline'>('overview')
+const activeTab = ref<'overview' | 'documents' | 'responses' | 'ai_analysis' | 'timeline'>(
+  props.initialTab ?? 'overview',
+)
+
+watch(() => props.applicationId, () => {
+  activeTab.value = props.initialTab ?? 'overview'
+})
 
 // ─────────────────────────────────────────────
 // Fetch application detail
@@ -635,6 +642,19 @@ function formatInterviewDate(dateStr: string) {
                   <dt class="text-xs font-medium text-surface-400 dark:text-surface-500 mb-1">Phone</dt>
                   <dd class="text-surface-800 dark:text-surface-200 font-medium">
                     {{ application.candidate.phone }}
+                  </dd>
+                </div>
+                <div v-if="candidateData?.retention?.enabled">
+                  <dt class="text-xs font-medium text-surface-400 dark:text-surface-500 mb-1">
+                    Data retention
+                  </dt>
+                  <dd class="text-surface-800 dark:text-surface-200 font-medium">
+                    <template v-if="candidateData.retention.quarantinedAt">
+                      Quarantined · purge {{ formatDateTime(candidateData.retention.scheduledPurgeAt) }}
+                    </template>
+                    <template v-else>
+                      {{ candidateData.retention.status }} · {{ formatDateTime(candidateData.retention.expiresAt) }}
+                    </template>
                   </dd>
                 </div>
               </dl>

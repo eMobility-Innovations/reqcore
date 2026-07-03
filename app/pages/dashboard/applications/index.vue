@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FileText, Search, X, Briefcase, Mail, Clock, ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Maximize2, Minimize2, Check } from 'lucide-vue-next'
+import { FileText, Search, X, Briefcase, Mail, Clock, ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Maximize2, Minimize2, Check, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 definePageMeta({
   layout: 'dashboard',
@@ -51,6 +51,9 @@ watch(visibleColumns, (val) => {
 
 const route = useRoute()
 const router = useRouter()
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
+const page = ref(1)
+const pageSize = ref<(typeof PAGE_SIZE_OPTIONS)[number]>(20)
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
@@ -95,8 +98,22 @@ const statusFilter = computed(() => activeStatus.value)
 const propertyFilters = ref<import('~~/shared/properties').PropertyFilter[]>([])
 
 const { applications, total, fetchStatus, error, refresh } = useApplications({
+  page,
+  limit: pageSize,
   status: statusFilter,
   propertyFilters,
+})
+
+watch([statusFilter, propertyFilters, pageSize], () => {
+  page.value = 1
+}, { deep: true })
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+const pageStart = computed(() => total.value === 0 ? 0 : ((page.value - 1) * pageSize.value) + 1)
+const pageEnd = computed(() => Math.min(total.value, page.value * pageSize.value))
+
+watch(totalPages, (next) => {
+  if (page.value > next) page.value = next
 })
 
 const { formatPersonName } = useOrgSettings()
@@ -104,6 +121,10 @@ const { formatPersonName } = useOrgSettings()
 // ── Job filter (client-side) ──────────────────────────────────────────────────
 
 const activeJobId = ref<string | undefined>(undefined)
+
+watch([debouncedSearch, activeJobId], () => {
+  page.value = 1
+})
 
 const uniqueJobs = computed(() => {
   const map = new Map<string, string>()
@@ -349,17 +370,7 @@ const selectedApplicationId = ref<string | null>(null)
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-50">Applications</h1>
-        <p class="text-sm text-surface-500 dark:text-surface-400 mt-1">
-          Track candidates through your hiring pipeline.
-        </p>
-      </div>
-    </div>
-
+  <div class="mx-auto -mb-6 flex h-[calc(100%+1.5rem)] max-w-6xl flex-col lg:-mb-8 lg:h-[calc(100%+2rem)]">
     <!-- Search + Views + Filters -->
     <div class="flex items-center gap-2 mb-4">
       <div class="relative flex-1">
@@ -567,9 +578,9 @@ const selectedApplicationId = ref<string | null>(null)
     </div>
 
     <!-- Application table -->
-    <div v-else>
+    <div v-else class="min-h-0 flex-1">
       <Teleport to="body" :disabled="!isFullscreen">
-        <div :class="isFullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-surface-950 flex flex-col' : ''">
+        <div :class="isFullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-surface-950 flex flex-col' : 'flex h-full min-h-0 flex-col'">
           <!-- Fullscreen header -->
           <div v-if="isFullscreen" class="flex items-center justify-between px-4 py-3 border-b border-surface-200 dark:border-surface-800 shrink-0 bg-white dark:bg-surface-950">
             <span class="text-sm font-semibold text-surface-900 dark:text-surface-100">
@@ -584,8 +595,9 @@ const selectedApplicationId = ref<string | null>(null)
               Exit fullscreen
             </button>
           </div>
-          <div :class="isFullscreen ? 'flex-1 overflow-auto p-4' : ''">
-            <div class="overflow-x-auto rounded-lg border border-surface-200 dark:border-surface-800">
+          <div :class="isFullscreen ? 'flex-1 min-h-0 overflow-hidden p-4' : 'min-h-0 flex-1'">
+            <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-surface-200 dark:border-surface-800">
+              <div class="min-h-0 flex-1 overflow-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="bg-surface-50 dark:bg-surface-800/50 border-b border-surface-200 dark:border-surface-800">
@@ -713,10 +725,47 @@ const selectedApplicationId = ref<string | null>(null)
         </table>
       </div>
 
-      <!-- Footer count -->
-      <p class="text-xs text-surface-400 pt-3">
-        Showing {{ filteredApplications.length }} of {{ total }} application{{ total === 1 ? '' : 's' }}
-      </p>
+      <!-- Pagination -->
+      <div class="shrink-0 flex flex-col gap-3 border-t border-surface-200 dark:border-surface-800 bg-surface-50/80 dark:bg-surface-900 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-2 text-xs text-surface-500 dark:text-surface-400">
+          <span>
+            Showing {{ pageStart }}-{{ pageEnd }} of {{ total }} application{{ total === 1 ? '' : 's' }}
+          </span>
+          <label class="inline-flex items-center gap-1.5">
+            <span>Rows</span>
+            <select
+              v-model.number="pageSize"
+              class="h-8 rounded-md border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-950 px-2 text-xs text-surface-700 dark:text-surface-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option v-for="size in PAGE_SIZE_OPTIONS" :key="size" :value="size">{{ size }}</option>
+            </select>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-surface-500 dark:text-surface-400">
+            Page {{ page }} of {{ totalPages }}
+          </span>
+          <button
+            type="button"
+            class="inline-flex size-8 items-center justify-center rounded-md border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-950 text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="page <= 1"
+            title="Previous page"
+            @click="page--"
+          >
+            <ChevronLeft class="size-4" />
+          </button>
+          <button
+            type="button"
+            class="inline-flex size-8 items-center justify-center rounded-md border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-950 text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="page >= totalPages"
+            title="Next page"
+            @click="page++"
+          >
+            <ChevronRight class="size-4" />
+          </button>
+        </div>
+      </div>
+            </div>
           </div>
         </div>
       </Teleport>

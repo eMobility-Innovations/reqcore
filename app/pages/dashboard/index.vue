@@ -3,7 +3,7 @@ import {
   Briefcase, Users, FileText, Calendar, Plus,
   ArrowRight, TrendingUp, Clock, AlertCircle,
   Eye, UserPlus, ExternalLink,
-  LayoutDashboard, Zap,
+  LayoutDashboard, Zap, Sparkles,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -191,45 +191,58 @@ const isEmpty = computed(() =>
     </div>
 
     <!-- ─── Empty state (brand new org) ─── -->
-    <div v-else-if="isEmpty" class="flex flex-col items-center justify-center py-24">
-      <div class="rounded-3xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-14 text-center max-w-md shadow-sm">
-        <div class="mx-auto mb-8 flex items-center justify-center size-18 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-lg shadow-brand-500/20">
-          <LayoutDashboard class="size-9 text-white" />
+    <div v-else-if="isEmpty" class="flex min-h-[calc(100svh-10rem)] items-center justify-center">
+      <div class="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white dark:bg-surface-900 ring-1 ring-surface-950/[0.06] dark:ring-white/[0.06] shadow-xl shadow-surface-950/[0.05] dark:shadow-2xl dark:shadow-black/40">
+        <!-- Single restrained accent: top hairline + soft brand glow behind the mark -->
+        <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-500/60 to-transparent" />
+        <div class="pointer-events-none absolute -top-24 left-1/2 size-56 -translate-x-1/2 rounded-full bg-brand-500/[0.07] blur-3xl dark:bg-brand-500/[0.12]" />
+
+        <div class="relative px-8 py-10 text-center">
+          <!-- Brand mark -->
+          <div class="mx-auto mb-6 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-lg shadow-brand-600/25 ring-1 ring-inset ring-white/15">
+            <Sparkles class="size-7 text-white" />
+          </div>
+
+          <h2 class="text-2xl font-bold tracking-tight text-surface-900 dark:text-surface-50">
+            Welcome to Reqcore
+          </h2>
+          <p class="mx-auto mt-2.5 max-w-[17rem] text-sm leading-relaxed text-surface-500 dark:text-surface-400">
+            Post a role, let the applicants roll in, and we'll surface your shortlist.
+          </p>
+
+          <!-- Slim guided path -->
+          <div class="mx-auto mt-8 flex max-w-[15rem] flex-col gap-3.5 text-left">
+            <div class="flex items-center gap-3">
+              <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-bold text-white shadow-sm shadow-brand-600/30">1</span>
+              <span class="text-sm font-medium text-surface-700 dark:text-surface-200">Post your first job</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-100 dark:bg-surface-800 text-[11px] font-bold text-surface-400 dark:text-surface-500 ring-1 ring-surface-200 dark:ring-surface-700">2</span>
+              <span class="text-sm font-medium text-surface-500 dark:text-surface-400">Add or import applicants</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-100 dark:bg-surface-800 text-[11px] font-bold text-surface-400 dark:text-surface-500 ring-1 ring-surface-200 dark:ring-surface-700">3</span>
+              <span class="text-sm font-medium text-surface-500 dark:text-surface-400">Review your shortlist</span>
+            </div>
+          </div>
+
+          <!-- One clear action -->
+          <NuxtLink
+            :to="localePath('/dashboard/jobs/new')"
+            class="group mt-8 inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-brand-600 px-7 py-3.5 text-sm font-semibold text-white shadow-md shadow-brand-600/25 transition-all hover:bg-brand-700 hover:shadow-lg hover:shadow-brand-600/30 no-underline"
+          >
+            <Plus class="size-4" />
+            Create your first job
+            <ArrowRight class="size-4 transition-transform group-hover:translate-x-0.5" />
+          </NuxtLink>
+          <p class="mt-3 text-xs text-surface-400 dark:text-surface-500">No applicant limits, ever.</p>
         </div>
-        <h2 class="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-3 tracking-tight">
-          Welcome to Reqcore
-        </h2>
-        <p class="text-sm text-surface-500 dark:text-surface-400 mb-10 leading-relaxed max-w-sm mx-auto">
-          Your recruiting command center. Create your first job posting to start building your hiring pipeline.
-        </p>
-        <NuxtLink
-          :to="localePath('/dashboard/jobs/new')"
-          class="inline-flex items-center gap-2.5 rounded-xl bg-brand-600 px-7 py-3.5 text-sm font-semibold text-white hover:bg-brand-700 shadow-md shadow-brand-600/20 hover:shadow-lg hover:shadow-brand-600/25 transition-all no-underline"
-        >
-          <Plus class="size-4" />
-          Create Your First Job
-        </NuxtLink>
       </div>
     </div>
 
     <!-- ─── Dashboard content ─── -->
     <template v-else>
       <!-- ─── Header ─── -->
-      <div class="flex items-center justify-between mb-6 sm:mb-10">
-        <div>
-          <h1 class="text-xl sm:text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">Dashboard</h1>
-          <p v-if="activeOrg" class="text-sm text-surface-400 dark:text-surface-500 mt-1">
-            {{ activeOrg.name }}
-          </p>
-        </div>
-        <NuxtLink
-          :to="localePath('/dashboard/jobs/new')"
-          class="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-brand-600 px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-brand-700 shadow-sm shadow-brand-600/15 hover:shadow-md hover:shadow-brand-600/20 transition-all no-underline shrink-0"
-        >
-          <Plus class="size-4" />
-          New Job
-        </NuxtLink>
-      </div>
 
       <!-- ─── Stat cards ─── -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-10">

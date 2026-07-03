@@ -3,9 +3,20 @@ import { ChevronDown } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{
   dropUp?: boolean
+  /**
+   * Horizontal edge the menu aligns to. Defaults follow `dropUp` for backwards
+   * compatibility (drop-up menus align left, drop-down menus align right). Set
+   * explicitly when the trigger sits near a screen edge so the menu opens
+   * inward instead of off-screen.
+   */
+  align?: 'left' | 'right'
 }>(), {
   dropUp: false,
 })
+
+const horizontalAlign = computed(() =>
+  props.align ?? (props.dropUp ? 'left' : 'right'),
+)
 
 const route = useRoute()
 const requestURL = useRequestURL()
@@ -196,7 +207,10 @@ async function handleLocaleChange(nextLocale: string) {
         role="listbox"
         :aria-label="t('common.selectLanguage')"
         class="absolute z-50 min-w-40 rounded-md border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-lg py-1 text-xs"
-        :class="props.dropUp ? 'left-0 bottom-full mb-1' : 'right-0 mt-1'"
+        :class="[
+          props.dropUp ? 'bottom-full mb-1' : 'mt-1',
+          horizontalAlign === 'left' ? 'left-0' : 'right-0',
+        ]"
       >
         <li
           v-for="option in localeOptions"

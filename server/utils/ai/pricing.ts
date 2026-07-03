@@ -1,0 +1,84 @@
+/**
+ * Central AI price table — the single source of truth for what a token costs us.
+ *
+ * Cost is always computed at *write time* from this table and frozen onto the
+ * `analysisRun` row (see `costUsdMicros`). We never recompute historical cost
+ * from mutable per-org `aiConfig` pricing — model prices change, and BYOK orgs
+ * carry their own numbers. This table is what reconciles against the OpenRouter
+ * invoice for platform-paid runs.
+ *
+ * Prices are USD per 1,000,000 tokens. Keep in sync with the model lists in
+ * `PROVIDER_REGISTRY` (provider.ts) when adding models.
+ */
+
+export interface ModelPrice {
+  /** USD per 1M input (prompt) tokens. */
+  inputPer1m: number
+  /** USD per 1M output (completion) tokens. */
+  outputPer1m: number
+}
+
+/**
+ * Keyed by bare model id. We match on model id alone (not provider) because the
+ * same model reached via OpenRouter, the native API, or a BYOK key costs us the
+ * same per-token rate — only the billing *payer* differs (see `billingMode`).
+ *
+ * OpenRouter-style prefixed ids (e.g. `openai/gpt-4.1-mini`) are normalised to
+ * the bare id before lookup, so both forms resolve here.
+ */
+export const MODEL_PRICING: Record<string, ModelPrice> = {
+  // OpenAI
+  'gpt-4.1': { inputPer1m: 2.0, outputPer1m: 8.0 },
+  'gpt-4.1-mini': { inputPer1m: 0.4, outputPer1m: 1.6 },
+  'gpt-4.1-nano': { inputPer1m: 0.1, outputPer1m: 0.4 },
+  'gpt-4o': { inputPer1m: 2.5, outputPer1m: 10.0 },
+  'gpt-4o-mini': { inputPer1m: 0.15, outputPer1m: 0.6 },
+  'o3': { inputPer1m: 2.0, outputPer1m: 8.0 },
+  'o4-mini': { inputPer1m: 1.1, outputPer1m: 4.4 },
+  // Anthropic
+  'claude-opus-4-20250514': { inputPer1m: 15.0, outputPer1m: 75.0 },
+  'claude-sonnet-4-20250514': { inputPer1m: 3.0, outputPer1m: 15.0 },
+  'claude-3-5-haiku-20241022': { inputPer1m: 0.8, outputPer1m: 4.0 },
+  // Google
+  'gemini-2.5-pro': { inputPer1m: 1.25, outputPer1m: 10.0 },
+  'gemini-2.5-flash': { inputPer1m: 0.3, outputPer1m: 2.5 },
+  'gemini-2.0-flash': { inputPer1m: 0.1, outputPer1m: 0.4 },
+  'gemini-2.0-flash-lite': { inputPer1m: 0.075, outputPer1m: 0.3 },
+}
+
+/** Strip an OpenRouter-style `vendor/` prefix to get the bare model id. */
+export function normalizeModelId(model: string): string {
+  const slash = model.lastIndexOf('/')
+  return slash >= 0 ? model.slice(slash + 1) : model
+}
+
+/** Look up a price for a model id, or `null` if we don't have one on file. */
+export function getModelPrice(model: string): ModelPrice | null {
+  return MODEL_PRICING[normalizeModelId(model)] ?? null
+}
+
+/**
+ * Compute the cost of a run in **micro-dollars** (1e-6 USD), as an integer.
+ *
+ * Integer micro-dollars avoid floating-point drift when we sum thousands of
+ * runs for budget enforcement. Returns `null` when the model is unpriced — the
+ * caller stores null rather than a wrong number, and the budget gate treats an
+ * unpriced model conservatively (see budget.ts).
+ *
+ * cost(USD) = tokens/1e6 * pricePer1m  ⇒  cost(µ$) = tokens * pricePer1m.
+ */
+export function computeCostUsdMicros(
+  model: string,
+  promptTokens: number,
+  completionTokens: number,
+): number | null {
+  const price = getModelPrice(model)
+  if (!price) return null
+  const micros = promptTokens * price.inputPer1m + completionTokens * price.outputPer1m
+  return Math.round(micros)
+}
+
+/** Convenience: micro-dollars → USD number (for display / PostHog props). */
+export function microsToUsd(micros: number): number {
+  return micros / 1_000_000
+}

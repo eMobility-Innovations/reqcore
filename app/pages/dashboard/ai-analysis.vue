@@ -14,10 +14,24 @@ useSeoMeta({
   robots: 'noindex, nofollow',
 })
 
-const { data: stats, status: fetchStatus, error, refresh } = useFetch('/api/ai-analysis/stats', {
+// The AI Analysis dashboard is a Team+ entitlement (mirrors the server gate).
+const { hasFeature, status: billingStatus } = usePlanFeature()
+const canUse = computed(() => hasFeature('aiAnalytics'))
+const locked = computed(() => billingStatus.value != null && !canUse.value)
+
+const { data: stats, status: fetchStatus, error, refresh, execute } = useFetch('/api/ai-analysis/stats', {
   key: 'ai-analysis-stats',
   headers: useRequestHeaders(['cookie']),
+  // Defer until we know the org is entitled, so locked orgs see the upsell
+  // instead of firing a doomed 402 at the gated endpoint.
+  immediate: false,
 })
+
+// Fetch only once billing status is known AND the org is entitled, so free
+// orgs never fire a doomed 402 (hasFeature is optimistically true while the
+// billing status is still loading).
+const canFetch = computed(() => billingStatus.value != null && canUse.value)
+watch(canFetch, (ok) => { if (ok) execute() }, { immediate: true })
 
 const summary = computed(() => stats.value?.summary ?? {
   totalRuns: 0,
@@ -118,8 +132,25 @@ function statusBadgeClass(status: string): string {
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <!-- ─── Loading skeleton ─── -->
-    <div v-if="fetchStatus === 'pending'">
+    <!-- ─── Plan gate (Team+) ─── -->
+    <div v-if="locked">
+      <div class="mb-8">
+        <h1 class="text-2xl font-bold tracking-tight text-surface-900 dark:text-surface-50">
+          AI Analysis
+        </h1>
+        <p class="mt-1 text-sm text-surface-500 dark:text-surface-400">
+          Provider health, scoring volume, token usage, and cost across every AI run.
+        </p>
+      </div>
+      <FeatureLockCard
+        feature="aiAnalytics"
+        title="Unlock the AI Analysis dashboard"
+        description="See provider health, scoring volume, token usage, and the exact cost of every AI run — across your whole organization."
+      />
+    </div>
+
+    <!-- ─── Loading skeleton (also covers the brief pre-entitlement check) ─── -->
+    <div v-else-if="fetchStatus === 'pending' || fetchStatus === 'idle'">
       <div class="mb-10">
         <div class="h-8 w-48 bg-surface-200 dark:bg-surface-700 rounded-lg animate-pulse mb-2" />
         <div class="h-4 w-64 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
@@ -175,14 +206,6 @@ function statusBadgeClass(status: string): string {
 
     <!-- ─── Dashboard content ─── -->
     <template v-else>
-      <!-- ─── Header ─── -->
-      <div class="flex items-center justify-between mb-10">
-        <div>
-          <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">AI Analysis</h1>
-          <p class="text-sm text-surface-400 dark:text-surface-500 mt-1">Overview of AI scoring runs and token usage</p>
-        </div>
-      </div>
-
       <!-- ─── Stat cards ─── -->
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-10">
         <!-- Total Runs -->

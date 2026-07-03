@@ -5,8 +5,10 @@ import {
 } from '../../../database/schema'
 import { scoreApplication, computeCompositeScore } from '../../../utils/ai/scoring'
 import type { CriterionDefinition } from '../../../utils/ai/scoring'
-import type { SupportedProvider } from '../../../utils/ai/provider'
-import { loadAiConfig } from '../../../utils/ai/loadConfig'
+import { resolveAnalysisProvider } from '../../../utils/ai/resolveProvider'
+import { assertPlatformBudget, BudgetExceededError, budgetErrorToHttp } from '../../../utils/ai/budget'
+import { computeCostUsdMicros } from '../../../utils/ai/pricing'
+import { captureAiGeneration } from '../../../utils/ai/observability'
 import { extractResumeText } from '../../../utils/resume-parser'
 import { createRateLimiter } from '../../../utils/rateLimit'
 import { z } from 'zod'
@@ -49,11 +51,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Application not found' })
   }
 
-  // Fetch AI config (override → analysis default → 422)
-  const config = await loadAiConfig(orgId, {
-    purpose: 'analysis',
-    preferId: parsedBody?.aiConfigId ?? null,
-  })
+  // Resolve provider: org's own key (BYOK) → platform key (OpenRouter) → 422.
+  const resolved = await resolveAnalysisProvider(orgId, { preferId: parsedBody?.aiConfigId ?? null })
 
   // Fetch scoring criteria for this job
   const criteria = await db.select().from(scoringCriterion)
@@ -115,17 +114,21 @@ export default defineEventHandler(async (event) => {
     weight: c.weight,
   }))
 
-  const providerConfig = {
-    provider: config.provider as SupportedProvider,
-    model: config.model,
-    apiKeyEncrypted: config.apiKeyEncrypted,
-    baseUrl: config.baseUrl,
-    maxTokens: config.maxTokens,
+  // Money-safety gate: only platform-paid runs are budget-capped. Fail-closed —
+  // if spend can't be read, the run is refused rather than risk an unbounded bill.
+  if (resolved.billingMode === 'platform') {
+    try {
+      await assertPlatformBudget(orgId)
+    } catch (err) {
+      if (err instanceof BudgetExceededError) throw budgetErrorToHttp(err)
+      throw createError({ statusCode: 503, statusMessage: 'AI budget check failed. Please try again later.' })
+    }
   }
 
+  const startedAt = Date.now()
   let result
   try {
-    result = await scoreApplication(providerConfig, {
+    result = await scoreApplication(resolved.providerConfig, {
       jobTitle: app.job.title,
       jobDescription: app.job.description,
       criteria: criteriaDefinitions,
@@ -139,11 +142,19 @@ export default defineEventHandler(async (event) => {
       organizationId: orgId,
       applicationId,
       status: 'failed',
-      provider: config.provider,
-      model: config.model,
+      provider: resolved.provider,
+      model: resolved.model,
+      billingMode: resolved.billingMode,
       criteriaSnapshot: criteriaDefinitions as any,
       errorMessage: err?.message ?? 'Unknown error',
       scoredById: session.user.id,
+    })
+
+    captureAiGeneration({
+      orgId, userId: session.user.id, applicationId, feature: 'application_analysis',
+      provider: resolved.provider, model: resolved.model, billingMode: resolved.billingMode,
+      promptTokens: 0, completionTokens: 0, costUsdMicros: null,
+      latencyMs: Date.now() - startedAt, status: 'failed',
     })
 
     throw createError({
@@ -151,6 +162,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: `AI analysis failed: ${err?.message ?? 'Unknown error'}`,
     })
   }
+
+  const costUsdMicros = computeCostUsdMicros(
+    resolved.model, result.usage.promptTokens, result.usage.completionTokens,
+  )
 
   // Compute composite score
   const compositeScore = computeCompositeScore(criteriaDefinitions, result.scoring.evaluations)
@@ -190,14 +205,24 @@ export default defineEventHandler(async (event) => {
       organizationId: orgId,
       applicationId,
       status: 'completed',
-      provider: config.provider,
-      model: config.model,
+      provider: resolved.provider,
+      model: resolved.model,
+      billingMode: resolved.billingMode,
       criteriaSnapshot: criteriaDefinitions as any,
       compositeScore,
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
+      costUsdMicros,
       scoredById: session.user.id,
     }).returning()
+  })
+
+  captureAiGeneration({
+    orgId, userId: session.user.id, applicationId, feature: 'application_analysis',
+    provider: resolved.provider, model: resolved.model, billingMode: resolved.billingMode,
+    promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens,
+    costUsdMicros, latencyMs: Date.now() - startedAt, status: 'completed',
+    traceId: run!.id,
   })
 
   recordActivity({
@@ -208,7 +233,7 @@ export default defineEventHandler(async (event) => {
     resourceId: applicationId,
     metadata: {
       compositeScore,
-      model: config.model,
+      model: resolved.model,
       criterionCount: result.scoring.evaluations.length,
     },
   })

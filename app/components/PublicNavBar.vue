@@ -1,22 +1,36 @@
 <script setup lang="ts">
-import { Github, Sun, Moon } from 'lucide-vue-next'
+import { Menu, Moon, Sun, X } from 'lucide-vue-next'
 
 defineProps<{
-  activePage?: 'features' | 'jobs' | 'roadmap' | 'blog' | 'docs'
+  activePage?: 'home' | 'features' | 'pricing' | 'jobs' | 'roadmap' | 'blog' | 'docs'
+  compact?: boolean
 }>()
 
 const { t } = useI18n()
 const localePath = useLocalePath()
 const { data: session } = await authClient.useSession(useFetch)
 const { isDark, toggle: toggleColorMode } = useColorMode()
+const route = useRoute()
+const mobileMenuOpen = ref(false)
+
+const navLinks = computed(() => [
+  { to: localePath('/pricing'), label: t('home.nav.pricing'), page: 'pricing' },
+  { to: localePath('/jobs'), label: t('home.nav.openPositions'), page: 'jobs' },
+])
+
+watch(() => route.fullPath, () => {
+  mobileMenuOpen.value = false
+})
 </script>
 
 <template>
-  <nav class="fixed inset-x-0 top-0 z-50 border-b border-surface-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-xl">
-    <div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-      <!-- Logo — links to marketing site (reqcore.com) -->
-      <a
-        :href="useRuntimeConfig().public.marketingUrl"
+  <nav class="fixed inset-x-0 top-0 z-50 border-b border-surface-200/80 dark:border-white/[0.06] bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-xl">
+    <div
+      class="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6"
+      :class="compact ? 'h-12' : 'h-14'"
+    >
+      <NuxtLink
+        :to="localePath('/')"
         class="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight text-surface-900 dark:text-white"
       >
         <img
@@ -29,26 +43,19 @@ const { isDark, toggle: toggleColorMode } = useColorMode()
           class="h-7 w-7 object-contain"
         />
         Reqcore
-      </a>
+      </NuxtLink>
 
       <!-- Center nav links (desktop) -->
       <div class="hidden items-center gap-1 md:flex">
         <NuxtLink
-          :to="localePath('/jobs')"
+          v-for="link in navLinks"
+          :key="link.to"
+          :to="link.to"
           class="rounded-md px-3 py-1.5 text-[13px] font-medium transition"
-          :class="activePage === 'jobs' ? 'text-surface-900 dark:text-white' : 'text-surface-500 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white'"
+          :class="activePage === link.page ? 'text-surface-900 dark:text-white bg-surface-100 dark:bg-white/[0.06]' : 'text-surface-500 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-100 dark:hover:bg-white/[0.04]'"
         >
-          {{ t('home.nav.openPositions') }}
+          {{ link.label }}
         </NuxtLink>
-        <a
-          href="https://github.com/reqcore-inc/reqcore"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium text-surface-500 dark:text-surface-400 transition hover:text-surface-900 dark:hover:text-white"
-        >
-          <Github class="h-3.5 w-3.5" />
-          {{ t('home.nav.github') }}
-        </a>
       </div>
 
       <!-- Right: session actions + language switcher -->
@@ -89,6 +96,33 @@ const { isDark, toggle: toggleColorMode } = useColorMode()
             {{ t('home.nav.signUp') }}
           </NuxtLink>
         </template>
+        <button
+          class="inline-flex size-8 items-center justify-center rounded-lg border-0 bg-transparent text-surface-500 transition hover:bg-surface-100 hover:text-surface-700 dark:text-surface-400 dark:hover:bg-white/10 dark:hover:text-white md:hidden"
+          :title="mobileMenuOpen ? 'Close navigation' : 'Open navigation'"
+          :aria-expanded="mobileMenuOpen"
+          aria-controls="public-mobile-nav"
+          @click="mobileMenuOpen = !mobileMenuOpen"
+        >
+          <X v-if="mobileMenuOpen" class="size-4" />
+          <Menu v-else class="size-4" />
+        </button>
+      </div>
+    </div>
+    <div
+      v-if="mobileMenuOpen"
+      id="public-mobile-nav"
+      class="border-t border-surface-200/80 bg-white px-4 py-3 shadow-sm dark:border-white/[0.06] dark:bg-[#09090b] md:hidden"
+    >
+      <div class="mx-auto flex max-w-6xl flex-col gap-1">
+        <NuxtLink
+          v-for="link in navLinks"
+          :key="`mobile-${link.to}`"
+          :to="link.to"
+          class="rounded-md px-3 py-2 text-sm font-medium transition"
+          :class="activePage === link.page ? 'bg-surface-100 text-surface-900 dark:bg-white/[0.06] dark:text-white' : 'text-surface-600 hover:bg-surface-100 hover:text-surface-900 dark:text-surface-300 dark:hover:bg-white/[0.06] dark:hover:text-white'"
+        >
+          {{ link.label }}
+        </NuxtLink>
       </div>
     </div>
   </nav>

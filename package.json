@@ -2,12 +2,20 @@
   "name": "reqcore",
   "version": "1.5.0",
   "type": "module",
-  "private": true,
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reqcore-inc/reqcore.git"
+  },
+  "bugs": {
+    "url": "https://github.com/reqcore-inc/reqcore/issues"
+  },
+  "homepage": "https://github.com/reqcore-inc/reqcore#readme",
   "scripts": {
     "build": "nuxt build",
     "start": "node .output/server/index.mjs",
     "start:railway": "npm run db:migrate && npm run db:seed && node .output/server/index.mjs",
-    "dev": "nuxt dev",
+    "dev": "LAUNCH_EDITOR=zed nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
@@ -18,6 +26,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "npx tsx server/scripts/seed.ts",
     "db:reseed": "npx tsx server/scripts/delete-demo-org.ts && npx tsx server/scripts/seed.ts",
+    "billing:grandfather-byok": "npx tsx server/scripts/grandfather-byok-orgs.ts",
     "test": "vitest run",
     "test:e2e": "npx playwright test",
     "i18n:crowdin:upload": "crowdin upload sources",
@@ -30,6 +39,7 @@
     "@ai-sdk/openai": "^3.0.58",
     "@aws-sdk/client-s3": "^3.1041.0",
     "@better-auth/sso": "^1.6.16",
+    "@better-auth/stripe": "^1.6.16",
     "@nuxtjs/i18n": "^10.3.0",
     "@nuxtjs/mdc": "^0.21.1",
     "@opentelemetry/api-logs": "^0.219.0",
@@ -47,12 +57,13 @@
     "googleapis": "^171.4.0",
     "lucide-vue-next": "^0.577.0",
     "mammoth": "^1.12.0",
-    "nodemailer": "^8.0.7",
+    "nodemailer": "^9.0.1",
     "nuxt": "^4.4.8",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.8",
     "posthog-node": "^5.28.0",
     "resend": "^6.12.2",
+    "stripe": "^22.2.2",
     "tailwindcss": "^4.1.18",
     "vue": "^3.5.33",
     "vue-router": "^5.1.0",
@@ -61,14 +72,14 @@
   },
   "devDependencies": {
     "@crowdin/cli": "^4.14.3",
-    "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.3",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^25.9.4",
     "@types/nodemailer": "^8.0.0",
     "@types/pdf-parse": "^1.1.5",
     "commander": "^13.1.0",
     "drizzle-kit": "^0.31.9",
     "tsx": "^4.22.4",
-    "vitest": "^4.1.8",
+    "vitest": "^4.1.9",
     "vue-tsc": "^3.3.5",
     "wait-on": "^9.0.10"
   },
@@ -94,7 +105,7 @@
     "fast-xml-builder": "1.2.0",
     "kysely": "0.28.17",
     "simple-git": "3.36.0",
-    "protobufjs": "8.6.3",
+    "protobufjs": "8.6.4",
     "form-data": "4.0.6"
   }
 }

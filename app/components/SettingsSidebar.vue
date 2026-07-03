@@ -1,12 +1,32 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
 import {
-  Building2, Users, UserCircle, ChevronLeft, Settings, Plug, Brain, ShieldCheck, Globe,
+  Building2, Users, UserCircle, ChevronLeft, Settings, Plug, Brain, ShieldCheck, Globe, ShieldAlert, CreditCard, Lock,
 } from 'lucide-vue-next'
+import type { PlanFeature } from '~~/shared/billing'
 
 const route = useRoute()
 const localePath = useLocalePath()
+const { t } = useI18n()
+const { hasFeature } = usePlanFeature()
 
-const settingsNav = [
+/** Show a lock hint when the org's plan can't use a nav item's feature. */
+function isLocked(feature?: PlanFeature) {
+  return !!feature && !hasFeature(feature)
+}
+
+interface SettingsNavItem {
+  label: string
+  description: string
+  to: string
+  icon: Component
+  exact: boolean
+  badge?: string
+  /** When set and the plan isn't entitled, the item shows a lock hint. */
+  feature?: PlanFeature
+}
+
+const settingsNav: SettingsNavItem[] = [
   {
     label: 'General',
     description: 'Organization profile',
@@ -29,11 +49,19 @@ const settingsNav = [
     exact: true,
   },
   {
+    label: 'Billing',
+    description: 'Plan & payment',
+    to: '/dashboard/settings/billing',
+    icon: CreditCard,
+    exact: true,
+  },
+  {
     label: 'Integrations',
     description: 'Calendar & services',
     to: '/dashboard/settings/integrations',
     icon: Plug,
     exact: true,
+    feature: 'calendar',
   },
   {
     label: 'AI Configuration',
@@ -41,6 +69,15 @@ const settingsNav = [
     to: '/dashboard/settings/ai',
     icon: Brain,
     exact: true,
+    feature: 'byok',
+  },
+  {
+    label: t('retention.title'),
+    description: t('retention.policy.title'),
+    to: '/dashboard/settings/retention',
+    icon: ShieldAlert,
+    exact: true,
+    feature: 'retention',
   },
   {
     label: 'Single Sign-On',
@@ -49,6 +86,7 @@ const settingsNav = [
     icon: ShieldCheck,
     exact: true,
     badge: 'Beta',
+    feature: 'sso',
   },
   {
     label: 'Account',
@@ -118,6 +156,11 @@ function isActive(to: string, exact: boolean) {
               >
                 {{ item.badge }}
               </span>
+              <Lock
+                v-if="isLocked(item.feature)"
+                class="size-3 shrink-0 text-surface-400 dark:text-surface-500"
+                aria-label="Requires a higher plan"
+              />
             </div>
             <div
               class="text-[11px] leading-tight mt-0.5 truncate"

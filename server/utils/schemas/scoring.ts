@@ -49,10 +49,11 @@ const criterionCategoryValues = ['technical', 'experience', 'soft_skills', 'educ
 
 export const createCriterionSchema = z.object({
   key: z.string()
+    .trim()
     .min(1).max(100)
     .regex(/^[a-z][a-z0-9_]*$/, 'Key must be lowercase alphanumeric with underscores, starting with a letter'),
-  name: z.string().min(1).max(200),
-  description: z.string().max(1000).nullish(),
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(1000).nullish(),
   category: z.enum(criterionCategoryValues).optional().default('custom'),
   maxScore: z.number().int().min(1).max(100).optional().default(10),
   weight: z.number().int().min(0).max(100).optional().default(50),

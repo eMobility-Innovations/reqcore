@@ -12,7 +12,10 @@ import { generateObject } from 'ai'
 import type { z } from 'zod'
 import { decrypt } from '../encryption'
 
-export type SupportedProvider = 'openai' | 'anthropic' | 'google' | 'openai_compatible'
+export type SupportedProvider = 'openai' | 'anthropic' | 'google' | 'openai_compatible' | 'openrouter'
+
+/** Base URL for the OpenRouter unified gateway (platform-paid runs). */
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
 export interface ProviderConfig {
   provider: SupportedProvider
@@ -111,6 +114,25 @@ export const PROVIDER_REGISTRY: Record<string, {
 }
 
 /**
+ * Fetch wrapper for OpenRouter that injects `provider: { allow_fallbacks: false }`
+ * into the JSON request body, pinning routing for reliable structured output.
+ * Falls through untouched if the body isn't parseable JSON.
+ */
+const pinOpenRouterRouting: typeof fetch = async (input, init) => {
+  if (init?.body && typeof init.body === 'string') {
+    try {
+      const body = JSON.parse(init.body)
+      body.provider = { allow_fallbacks: false, ...(body.provider ?? {}) }
+      init = { ...init, body: JSON.stringify(body) }
+    }
+    catch {
+      // Non-JSON body (shouldn't happen for chat completions) — leave as-is.
+    }
+  }
+  return fetch(input, init)
+}
+
+/**
  * Create a language model instance from encrypted config.
  * Decrypts the API key just-in-time and never persists it in memory beyond the call.
  */
@@ -133,6 +155,24 @@ export function createLanguageModel(config: ProviderConfig) {
         ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
       })
       return openai(config.model)
+    }
+    case 'openrouter': {
+      // OpenRouter is OpenAI-compatible. The `@ai-sdk/openai` provider won't
+      // forward OpenRouter's top-level `provider` routing field, so we inject it
+      // via a fetch wrapper: disabling fallbacks keeps structured-output
+      // (generateObject) from intermittently breaking when OpenRouter would
+      // otherwise route to an upstream with weaker JSON/tool-mode support.
+      const openrouter = createOpenAI({
+        apiKey,
+        baseURL: config.baseUrl || OPENROUTER_BASE_URL,
+        headers: {
+          // Recommended by OpenRouter for attribution in their dashboard.
+          'HTTP-Referer': 'https://reqcore.com',
+          'X-Title': 'Reqcore',
+        },
+        fetch: pinOpenRouterRouting,
+      })
+      return openrouter(config.model)
     }
     case 'anthropic': {
       const anthropic = createAnthropic({
@@ -179,7 +219,7 @@ export async function generateStructuredOutput<T>(
     schema: options.schema,
     schemaName: options.schemaName,
     schemaDescription: options.schemaDescription,
-    maxTokens: config.maxTokens,
+    maxOutputTokens: config.maxTokens,
     temperature: 0.1,
   })
 

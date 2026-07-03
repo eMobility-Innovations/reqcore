@@ -14,6 +14,12 @@ useSeoMeta({
 const route = useRoute()
 const { calendarStatus, isConnected, isAvailable, connect, disconnect, refresh, status } = useCalendarIntegration()
 
+// Calendar sync is a Team+ feature (server gates the sync on interview create).
+// A connected org that downgrades keeps the disconnect control; only connecting
+// is locked behind the plan.
+const { hasFeature } = usePlanFeature()
+const canUseCalendar = computed(() => hasFeature('calendar'))
+
 const isDisconnecting = ref(false)
 const showDisconnectConfirm = ref(false)
 
@@ -134,7 +140,7 @@ async function handleDisconnect() {
           Connected
         </div>
         <div
-          v-else-if="!isAvailable"
+          v-else-if="!isAvailable && canUseCalendar"
           class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400"
         >
           Not configured
@@ -148,7 +154,13 @@ async function handleDisconnect() {
           <Loader2 class="size-5 text-surface-400 animate-spin" />
         </div>
 
-        <!-- Not configured (admin needs to set env vars) -->
+        <!-- Feature lock: calendar requires Team+ (shown before server-config check) -->
+        <FeatureLockCard
+          v-else-if="!canUseCalendar"
+          feature="calendar"
+        />
+
+        <!-- Not configured (admin needs to set env vars) — only shown to entitled users -->
         <div v-else-if="!isAvailable" class="space-y-3">
           <p class="text-sm text-surface-600 dark:text-surface-400">
             Google Calendar integration requires server configuration. A server administrator must set the
@@ -273,7 +285,7 @@ async function handleDisconnect() {
           </div>
         </div>
 
-        <!-- Disconnected / Ready to connect -->
+        <!-- Disconnected / Ready to connect (only reached when canUseCalendar is true) -->
         <div v-else class="space-y-4">
           <div class="space-y-3">
             <p class="text-sm text-surface-600 dark:text-surface-400">

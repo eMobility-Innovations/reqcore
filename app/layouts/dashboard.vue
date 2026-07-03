@@ -27,7 +27,14 @@ const isDemoAccount = computed(() => session.value?.user?.email === 'demo@reqcor
     <ClientOnly>
       <DemoUpsellBanner v-if="isDemoAccount" />
     </ClientOnly>
-    <main :class="['relative flex-1 min-h-0 overflow-y-auto', isFullbleed ? 'overflow-hidden' : 'px-4 py-6 sm:px-6 lg:px-8 lg:py-8']">
+    <main
+      :class="[
+        'relative flex-1 min-h-0',
+        isFullbleed
+          ? 'flex flex-col overflow-hidden'
+          : 'overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8',
+      ]"
+    >
       <!-- Demo mode banner -->
       <div
         v-if="isDemo"
@@ -44,7 +51,9 @@ const isDemoAccount = computed(() => session.value?.user?.email === 'demo@reqcor
           >Deploy your own free instance →</a>
         </span>
       </div>
-      <slot />
+      <div :class="isFullbleed ? 'min-h-0 flex-1 overflow-hidden' : 'contents'">
+        <slot />
+      </div>
     </main>
   </div>
 </template>

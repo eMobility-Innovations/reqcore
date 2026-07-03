@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {
-  Building2, Users, UserCircle, ChevronLeft, Plug, Brain, ShieldCheck, Globe,
+  Building2, Users, UserCircle, ChevronLeft, Plug, Brain, ShieldCheck, Globe, CreditCard,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -23,6 +23,12 @@ const settingsNav = [
     label: 'Members',
     to: '/dashboard/settings/members',
     icon: Users,
+    exact: true,
+  },
+  {
+    label: 'Billing',
+    to: '/dashboard/settings/billing',
+    icon: CreditCard,
     exact: true,
   },
   {

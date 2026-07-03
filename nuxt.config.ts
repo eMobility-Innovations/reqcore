@@ -45,16 +45,30 @@ const localizedPublicRouteRules = Object.fromEntries(
   i18nLocales
     .filter((locale) => locale.code !== i18nDefaultLocale)
     .flatMap((locale) => [
+      [`/${locale.code}/pricing`, { isr: 3600 }],
       [`/${locale.code}/jobs`, { isr: 3600 }],
       [`/${locale.code}/jobs/**`, { isr: 3600 }],
     ]),
 );
 
-// Allow search-engine indexing for localized job board pages
+const localizedPricingRedirectRules = Object.fromEntries(
+  i18nLocales
+    .filter((locale) => locale.code !== i18nDefaultLocale)
+    .map((locale) => [
+      `/${locale.code}/pricing-v5`,
+      { redirect: { to: `/${locale.code}/pricing`, statusCode: 301 } },
+    ]),
+);
+
+// Allow search-engine indexing for localized public marketing pages
 const localizedJobsRobotsRules = Object.fromEntries(
   i18nLocales
     .filter((locale) => locale.code !== i18nDefaultLocale)
     .flatMap((locale) => [
+      [
+        `/${locale.code}/pricing`,
+        { headers: { "X-Robots-Tag": "index, follow" } },
+      ],
       [
         `/${locale.code}/jobs`,
         { headers: { "X-Robots-Tag": "index, follow" } },
@@ -77,6 +91,12 @@ const isRailwayPreview =
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
+
+  // Enterprise Edition layer — see ee/README.md and ee/LICENSE. Code here is
+  // licensed separately from the AGPLv3 core and gated behind paid plan
+  // features at runtime (assertPlanFeature); it stays merged into every
+  // build since Reqcore only ships one hosted deployment.
+  extends: ["./ee"],
 
   modules: [
     "@nuxtjs/i18n",
@@ -263,7 +283,7 @@ export default defineNuxtConfig({
   },
 
   // ─────────────────────────────────────────────
-  // Route rules — ISR for public job pages
+  // Route rules — ISR for public marketing pages
   // ─────────────────────────────────────────────
   routeRules: {
     // ── PostHog reverse proxy ──
@@ -271,12 +291,23 @@ export default defineNuxtConfig({
     // to eu-assets.i.posthog.com and everything else to eu.i.posthog.com).
     // Defining routeRules here would be shadowed by the server route, so we
     // intentionally do not declare them.
+    "/pricing-v5": { redirect: { to: "/pricing", statusCode: 301 } },
+    ...localizedPricingRedirectRules,
+    "/pricing": { isr: 3600 },
     "/jobs": { isr: 3600 },
     "/jobs/**": { isr: 3600 },
     ...localizedPublicRouteRules,
   },
 
   nitro: {
+    experimental: {
+      tasks: true,
+    },
+    scheduledTasks: {
+      // Daily at 03:00 UTC. External cron remains supported for platforms that
+      // suspend long-running processes or do not execute Nitro task timers.
+      "0 3 * * *": ["retention-cleanup"],
+    },
     routeRules: {
       "/**": {
         headers: {
@@ -294,7 +325,12 @@ export default defineNuxtConfig({
           "X-Robots-Tag": "noindex, nofollow",
         },
       },
-      // Public job board pages — allow indexing
+      // Public marketing pages — allow indexing
+      "/pricing": {
+        headers: {
+          "X-Robots-Tag": "index, follow",
+        },
+      },
       "/jobs/**": {
         headers: {
           "X-Robots-Tag": "index, follow",
@@ -305,7 +341,7 @@ export default defineNuxtConfig({
           "X-Robots-Tag": "index, follow",
         },
       },
-      // Localized job board pages — allow indexing
+      // Localized public marketing pages — allow indexing
       ...localizedJobsRobotsRules,
       // Allow same-origin framing for inline PDF preview in the sidebar iframe
       "/api/documents/*/preview": {

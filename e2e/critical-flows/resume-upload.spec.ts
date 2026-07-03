@@ -1,5 +1,5 @@
 import { type Browser } from '@playwright/test'
-import { test, expect } from '../fixtures'
+import { test, expect, declineAnalyticsConsent } from '../fixtures'
 import {
   VALID_FILE_CONFIGS,
   INVALID_FILE_CONFIGS,
@@ -50,6 +50,7 @@ test.describe('Resume Upload — All File Formats', () => {
     // We need a fresh authenticated page to set up the job.
     // Re-use the same signup logic from fixtures.ts.
     const context = await browser.newContext()
+    await declineAnalyticsConsent(context)
     const page = await context.newPage()
 
     const id = `${Date.now()}-setup`
@@ -90,15 +91,36 @@ test.describe('Resume Upload — All File Formats', () => {
           resp => resp.url().includes('/api/auth/sign-in') && resp.status() === 200,
           { timeout: 30_000 },
         ),
-        page.getByRole('button', { name: 'Sign in' }).click(),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
       ])
-      await page.waitForURL('**/onboarding/**', { waitUntil: 'commit', timeout: 30_000 })
+      await page.goto('/onboarding/create-org')
     }
 
     await page.getByLabel('Organization name').waitFor({ state: 'visible', timeout: 30_000 })
     await page.getByLabel('Organization name').fill(account.orgName)
     await page.getByRole('button', { name: 'Create organization' }).click()
-    await page.waitForURL('**/dashboard**', { waitUntil: 'commit' })
+    await page.waitForURL(
+      url => url.pathname.includes('/dashboard') || url.pathname.includes('/auth/sign-in') || url.pathname.includes('/onboarding/welcome'),
+      { waitUntil: 'commit', timeout: 30_000 },
+    )
+
+    if (page.url().includes('/onboarding/welcome')) {
+      await page.goto('/dashboard')
+    }
+
+    if (page.url().includes('/auth/sign-in')) {
+      await page.getByLabel('Email').fill(account.email)
+      await page.getByLabel('Password').fill(account.password)
+      await Promise.all([
+        page.waitForResponse(
+          resp => resp.url().includes('/api/auth/sign-in') && resp.status() === 200,
+          { timeout: 30_000 },
+        ),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+      ])
+      await page.goto('/dashboard')
+    }
+    await page.waitForLoadState('networkidle')
 
     // ── Create job ─────────────────────────────────────────────────────────
 
@@ -204,6 +226,7 @@ async function assertUploadResult(
   const candidate = applicant(idx)
 
   const ctx = await browser.newContext()
+  await declineAnalyticsConsent(ctx)
   const page = await ctx.newPage()
 
   await page.goto(applicationLink)

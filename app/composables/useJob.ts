@@ -31,6 +31,7 @@ export function useJob(id: MaybeRefOrGetter<string>) {
     salaryNegotiable: boolean
     remoteStatus: 'remote' | 'hybrid' | 'onsite' | null
     validThrough: Date | null
+    phoneRequirement: 'hidden' | 'optional' | 'required'
     requireResume: boolean
     requireCoverLetter: boolean
     autoScoreOnApply: boolean
