@@ -11,7 +11,13 @@ const config = useRuntimeConfig()
 const route = useRoute()
 
 const brand = (config.public.brand as string) || 'remote-crew'
-const isEmbed = computed(() => !!route.query.embed)
+// Embed detection must survive in-app navigation. The board first loads with
+// ?embed=1 (SSR-safe), but base job-card and 'All positions' links do not carry
+// the query forward — so once we know we are embedded (query OR actually inside
+// an iframe) we latch it for the whole session. Fixes the header/footer chrome
+// re-appearing when opening a job or going back. Applies to every embedded brand.
+const embedLatch = useState('rc-embed-latch', () => false)
+const isEmbed = computed(() => !!route.query.embed || embedLatch.value)
 
 // Brand configuration map
 const brandConfig = {
@@ -87,6 +93,16 @@ if (import.meta.client) {
   }
 
   onMounted(() => {
+    // Latch embed mode: query param OR running inside an iframe. Cross-origin
+    // access to window.top throws — that itself means we are embedded.
+    let _inIframe = false
+    try { _inIframe = window.self !== window.top } catch { _inIframe = true }
+    let _storedEmbed = false
+    try { _storedEmbed = sessionStorage.getItem('rc-embed') === '1' } catch {}
+    if (route.query.embed || _inIframe || _storedEmbed) {
+      embedLatch.value = true
+      try { sessionStorage.setItem('rc-embed', '1') } catch {}
+    }
     _forceLight()
     _rcLightObserver = new MutationObserver(_forceLight)
     _rcLightObserver.observe(document.documentElement, {
@@ -310,6 +326,9 @@ if (import.meta.client) {
   /* No padding/min-height so content sits flush inside the iframe */
 }
 .rc-embed main {
-  padding-top: 0;
+  /* Symmetric vertical padding so the board sits evenly inside the iframe
+     (top/bottom margins equal — was padding-top:0 which left an uneven gap). */
+  padding-top: 2rem;
+  padding-bottom: 2rem;
 }
 </style>
