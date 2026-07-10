@@ -52,6 +52,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
 
+  // Notify the Nexus Onboarding Board on the offer→hired transition so it can
+  // open a "Pending onboarding" card. Fire-and-forget: `notifyNexusOnHire`
+  // never throws, and we don't await it, so a Nexus outage can't disrupt the
+  // recruiter's click. Dormant unless NEXUS_HIRE_WEBHOOK_URL/KEY are set.
+  if (updated.status === 'hired' && current.status !== 'hired') {
+    void notifyNexusOnHire({
+      organizationId: orgId,
+      applicationId: id,
+      candidateId: updated.candidateId,
+      jobId: updated.jobId,
+      score: updated.score,
+    })
+  }
+
   recordActivity({
     organizationId: orgId,
     actorId: session.user.id,
