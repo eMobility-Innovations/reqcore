@@ -192,6 +192,17 @@ export const envSchema = z
       .optional()
       .default("SSO"),
 
+    // ── Nexus onboarding hire webhook (fork: escooterclinic) ─
+    // When BOTH are set, the offer→hired transition fires a fire-and-forget
+    // POST to the Nexus Onboarding Board (see server/utils/nexusHire.ts).
+    // Deliberately both-optional and self-gating: partial config just keeps the
+    // webhook dormant. No both-or-none superRefine — this runs on a live ATS and
+    // a hard boot-time crash on partial config is more dangerous than dormancy.
+    /** Nexus hire webhook URL (…/api/onboarding-board/webhooks/reqcore/hired). */
+    NEXUS_HIRE_WEBHOOK_URL: emptyToUndefined.pipe(z.string().url()).optional(),
+    /** Shared secret sent as the X-Reqcore-Key header to the Nexus hire webhook. */
+    NEXUS_HIRE_WEBHOOK_KEY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+
     // ── Stripe Billing (optional) ───────────────────────────
     // When STRIPE_SECRET_KEY is set, self-serve subscription checkout is enabled.
     // All Stripe vars are all-or-none (enforced in superRefine below): leaving

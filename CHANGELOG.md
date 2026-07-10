@@ -14,6 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com). Categories: **Add
 
 ### Added
 
+* **onboarding (fork):** notify an external onboarding board on hire — the `offer → hired` transition on `PATCH /api/applications/:id` now fires a fire-and-forget POST (schema 1) carrying the candidate, job, and mapped custom properties (start date, contract type, company, country, work email domain). Gated on two optional, self-gating env vars (`NEXUS_HIRE_WEBHOOK_URL`, `NEXUS_HIRE_WEBHOOK_KEY`) — dormant unless both are set, and never throws to the recruiter's request. See `server/utils/nexusHire.ts`.
 * **GDPR retention:** add a shared candidate-retention runner with a daily Nitro task, external cron endpoint, instance-wide emergency switch, quarantine restoration on renewed public engagement, localized administration UI, and computed expiry visibility.
 * **GDPR erasure:** remove application-linked comments, custom properties, and activity records in addition to the candidate database graph and S3 objects.
 * **blog:** add Cluster 8 career page articles — pillar (career-page-that-converts) and two supporting articles (career-page-seo, google-for-jobs-structured-data)
