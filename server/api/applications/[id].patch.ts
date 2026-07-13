@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   // Fetch current application to validate status transition
   const current = await db.query.application.findFirst({
     where: and(eq(application.id, id), eq(application.organizationId, orgId)),
-    columns: { id: true, status: true },
+    columns: { id: true, status: true, jobId: true },
   })
 
   if (!current) {
@@ -30,6 +30,26 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 422,
         statusMessage: `Cannot transition from "${current.status}" to "${body.status}". Allowed: ${allowed.join(', ') || 'none'}`,
+      })
+    }
+  }
+
+  // Fork policy: HR must fill the required onboarding properties before a candidate
+  // can be marked hired. Enforced here — the single choke-point for all status
+  // changes — so both the "Mark Hired" button and the raw API are covered. The same
+  // fields feed the Nexus onboarding card (see server/utils/nexusHire.ts).
+  if (body.status === 'hired' && current.status !== 'hired') {
+    const entries = await loadPropertyEntriesForEntity({
+      organizationId: orgId,
+      entityType: 'application',
+      entityId: id,
+      jobId: current.jobId,
+    })
+    const missing = missingRequiredOnboarding(entries)
+    if (missing.length > 0) {
+      throw createError({
+        statusCode: 422,
+        statusMessage: `Cannot mark hired — fill the required onboarding fields first: ${missing.join(', ')}`,
       })
     }
   }
