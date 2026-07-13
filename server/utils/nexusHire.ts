@@ -58,6 +58,30 @@ function normalizeName(name: string): string {
 }
 
 /**
+ * Onboarding fields HR must fill before a candidate can be marked hired.
+ * `key` matches the packet field; `label` is the human-readable property name
+ * surfaced in the 422 when one is missing. Enforced in the applications PATCH
+ * handler on the offer→hired transition.
+ */
+const REQUIRED_ONBOARDING: { key: string; label: string }[] = [
+  { key: 'start_date', label: 'Start date' },
+  { key: 'contract_type', label: 'Contract type' },
+  { key: 'company', label: 'Company' },
+  { key: 'country', label: 'Country' },
+  { key: 'work_email_domain', label: 'Work email domain' },
+]
+
+/**
+ * Return the labels of any required onboarding fields that are absent/empty on
+ * the application, in display order. Empty list ⇒ all present (hire may proceed).
+ * Reuses `buildOnboardingFromProperties`, which only emits non-empty values.
+ */
+export function missingRequiredOnboarding(entries: PropertyEntry[]): string[] {
+  const onboarding = buildOnboardingFromProperties(entries)
+  return REQUIRED_ONBOARDING.filter((f) => !onboarding[f.key]).map((f) => f.label)
+}
+
+/**
  * Build the `onboarding` map from an application's custom property entries.
  * Select values are resolved to their human-readable label (not the option id)
  * via `formatPropertyValueAsText`. Unmapped or empty properties are skipped.

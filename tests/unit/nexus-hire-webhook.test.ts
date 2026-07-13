@@ -3,6 +3,7 @@ import {
   buildOnboardingFromProperties,
   buildNexusHirePacket,
   sendNexusHirePacket,
+  missingRequiredOnboarding,
 } from '../../server/utils/nexusHire'
 import { envSchema } from '../../server/utils/env'
 import type { PropertyEntry } from '../../server/utils/properties'
@@ -119,6 +120,39 @@ describe('buildOnboardingFromProperties', () => {
       entry('Country', 'select', 'unknown-id', { options: [{ id: 'gbr', label: 'GBR' }] }), // unresolvable → ''
     ])
     expect(onboarding).toEqual({})
+  })
+})
+
+describe('missingRequiredOnboarding', () => {
+  const sel = (name: string, id: string, label: string) =>
+    entry(name, 'select', id, { options: [{ id, label }] })
+
+  it('returns all five labels when nothing is filled', () => {
+    expect(missingRequiredOnboarding([])).toEqual([
+      'Start date', 'Contract type', 'Company', 'Country', 'Work email domain',
+    ])
+  })
+
+  it('returns empty when all five are present', () => {
+    const entries = [
+      entry('Start date', 'date', '2026-08-01'),
+      sel('Contract type', 'ft', 'Full-time'),
+      sel('Company', 'esc', 'Escooter Clinic'),
+      sel('Country', 'gbr', 'GBR'),
+      sel('Work email domain', 'ecc', '@escooterclinic.co.uk'),
+    ]
+    expect(missingRequiredOnboarding(entries)).toEqual([])
+  })
+
+  it('lists only the missing ones, in display order', () => {
+    const entries = [
+      sel('Contract type', 'ft', 'Full-time'),
+      sel('Country', 'gbr', 'GBR'),
+      entry('Start date', 'date', null), // empty → still missing
+    ]
+    expect(missingRequiredOnboarding(entries)).toEqual([
+      'Start date', 'Company', 'Work email domain',
+    ])
   })
 })
 
