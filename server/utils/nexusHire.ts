@@ -1,9 +1,14 @@
 import { and, eq } from 'drizzle-orm'
 import { candidate, job } from '../database/schema'
-import { formatPropertyValueAsText } from '../../shared/properties'
 import { logWarn } from './logger'
-import type { PropertyConfig } from '../../shared/properties'
+import { buildOnboardingFromProperties, missingRequiredOnboarding } from '../../shared/onboarding'
 import type { PropertyEntry } from './properties'
+
+// The onboarding field mapping + hire-time requirements live in shared/onboarding
+// (one source of truth, used by the client button gating too). Re-exported here so
+// the applications PATCH handler (Nitro auto-import) and the unit tests keep
+// reaching them via server/utils.
+export { buildOnboardingFromProperties, missingRequiredOnboarding }
 
 /**
  * Nexus onboarding "hired" webhook (fork addition — escooterclinic).
@@ -35,70 +40,6 @@ export type NexusHirePacket = {
   job: { title: string; location?: string }
   application: { id: string; score?: number }
   onboarding: Record<string, string>
-}
-
-/**
- * Map a normalized custom-property name → the onboarding packet key it feeds.
- * reqcore has no native start-date/contract/company/country fields; recruiters
- * add these as application-scoped `propertyDefinition`s during the offer stage.
- * Names are normalized (lowercased, non-alphanumerics stripped) so minor label
- * differences ("Start Date", "start date") still match.
- */
-const ONBOARDING_PROP_MAP: Record<string, string> = {
-  startdate: 'start_date',
-  contracttype: 'contract_type',
-  company: 'company',
-  country: 'country',
-  workemaildomain: 'work_email_domain',
-  position: 'position',
-}
-
-function normalizeName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '')
-}
-
-/**
- * Onboarding fields HR must fill before a candidate can be marked hired.
- * `key` matches the packet field; `label` is the human-readable property name
- * surfaced in the 422 when one is missing. Enforced in the applications PATCH
- * handler on the offer→hired transition.
- */
-const REQUIRED_ONBOARDING: { key: string; label: string }[] = [
-  { key: 'start_date', label: 'Start date' },
-  { key: 'contract_type', label: 'Contract type' },
-  { key: 'company', label: 'Company' },
-  { key: 'country', label: 'Country' },
-  { key: 'work_email_domain', label: 'Work email domain' },
-]
-
-/**
- * Return the labels of any required onboarding fields that are absent/empty on
- * the application, in display order. Empty list ⇒ all present (hire may proceed).
- * Reuses `buildOnboardingFromProperties`, which only emits non-empty values.
- */
-export function missingRequiredOnboarding(entries: PropertyEntry[]): string[] {
-  const onboarding = buildOnboardingFromProperties(entries)
-  return REQUIRED_ONBOARDING.filter((f) => !onboarding[f.key]).map((f) => f.label)
-}
-
-/**
- * Build the `onboarding` map from an application's custom property entries.
- * Select values are resolved to their human-readable label (not the option id)
- * via `formatPropertyValueAsText`. Unmapped or empty properties are skipped.
- */
-export function buildOnboardingFromProperties(entries: PropertyEntry[]): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const { definition, value } of entries) {
-    const key = ONBOARDING_PROP_MAP[normalizeName(definition.name)]
-    if (!key) continue
-    const text = formatPropertyValueAsText(
-      definition.type,
-      value,
-      (definition.config ?? null) as PropertyConfig,
-    )
-    if (text) out[key] = text
-  }
-  return out
 }
 
 /** Build the schema-1 packet from an application's joined candidate/job/props. */
