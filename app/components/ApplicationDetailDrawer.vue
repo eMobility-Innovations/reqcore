@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { X, ExternalLink, User, Briefcase, Calendar, Clock, Hash, FileText, MessageSquare } from 'lucide-vue-next'
+import { X, ExternalLink, User, Briefcase, Calendar, Clock, Hash, FileText, MessageSquare, Info } from 'lucide-vue-next'
 import { APPLICATION_STATUS_TRANSITIONS } from '~~/shared/status-transitions'
+import { missingRequiredOnboarding } from '~~/shared/onboarding'
+import type { PropertyEntry } from '~~/shared/properties'
 import { usePreviewReadOnly } from '~/composables/usePreviewReadOnly'
 
 const props = defineProps<{
@@ -54,6 +56,20 @@ const allowedTransitions = computed(() => {
 
 const isTransitioning = ref(false)
 const showInterviewSidebar = ref(false)
+
+// Onboarding fields HR must fill before Mark Hired — mirrors the server policy
+// (shared/onboarding + the applications PATCH guard) so the button greys out
+// early instead of relying on the 422. Single source of truth in shared/onboarding.
+const missingHireFields = computed(() =>
+  missingRequiredOnboarding((application.value?.properties ?? []) as PropertyEntry[]),
+)
+
+function transitionBlockedReason(status: string): string | null {
+  if (status === 'hired' && missingHireFields.value.length > 0) {
+    return `Fill the required onboarding fields first: ${missingHireFields.value.join(', ')}`
+  }
+  return null
+}
 
 async function handleTransition(newStatus: string) {
   isTransitioning.value = true
@@ -226,7 +242,8 @@ onUnmounted(() => {
                 <button
                   v-for="nextStatus in allowedTransitions"
                   :key="nextStatus"
-                  :disabled="isTransitioning"
+                  :disabled="isTransitioning || !!transitionBlockedReason(nextStatus)"
+                  :title="transitionBlockedReason(nextStatus) ?? undefined"
                   class="inline-flex cursor-pointer items-center rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                   :class="transitionClasses[nextStatus] ?? 'border border-surface-300 dark:border-surface-700 bg-white/80 dark:bg-surface-900 text-surface-700 dark:text-surface-300 hover:border-surface-400 dark:hover:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-800'"
                   @click="handleTransition(nextStatus)"
@@ -245,6 +262,13 @@ onUnmounted(() => {
                   Schedule Interview
                 </button>
               </div>
+              <p
+                v-if="allowedTransitions.includes('hired') && missingHireFields.length"
+                class="mt-2 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"
+              >
+                <Info class="mt-0.5 size-3.5 shrink-0" />
+                <span>Before hiring, fill these onboarding fields: <strong>{{ missingHireFields.join(', ') }}</strong>.</span>
+              </p>
             </div>
 
             <!-- Candidate & Job cards -->
