@@ -5,9 +5,6 @@
 **The simple, open-source ATS. Self-hosted. No per-seat fees.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![E2E Tests](https://github.com/reqcore-inc/reqcore/actions/workflows/e2e-tests.yml/badge.svg)](https://github.com/reqcore-inc/reqcore/actions/workflows/e2e-tests.yml)
-[![PR Validation](https://github.com/reqcore-inc/reqcore/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/reqcore-inc/reqcore/actions/workflows/pr-validation.yml)
-[![Docker Integration](https://github.com/reqcore-inc/reqcore/actions/workflows/docker-readme-validation.yml/badge.svg)](https://github.com/reqcore-inc/reqcore/actions/workflows/docker-readme-validation.yml)
 [![Docker Image](https://ghcr-badge.egpl.dev/reqcore-inc/reqcore/latest_tag?trim=major&label=docker)](https://github.com/reqcore-inc/reqcore/pkgs/container/reqcore)
 
 [Live Demo](https://reqcore.com) · [Documentation](ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Report Bug](https://github.com/reqcore-inc/reqcore/issues/new)
@@ -294,6 +291,32 @@ setup.sh                      # One-time secret generator → writes .env
 ```
 
 ## Deployment
+
+### Local quality gate
+
+GitHub Actions is permanently unavailable for the eMobility-Innovations organization by operator decision. The required gate for this fork is `./verify.sh`; run `./install-hooks.sh` once per clone (or let the organization policy package arm it) so every push runs the gate.
+
+The gate installs dependencies and runs the unit tests, lint command when present, Nuxt typecheck, high-severity dependency audit, production build, Playwright E2E suite, complete Docker new-user/setup integration, and the check that prevents GitHub Actions workflows from returning. An absent Node, Docker, AWS CLI, browser, or other required tool fails the gate.
+
+This is intentionally not the full upstream project's CI. Upstream-only Dependabot automerge, PR-title linting, and release-please automation manage upstream's GitHub process and have no local replacement in this fork. Publishing and release mutation are also excluded from the gate because shipping is not code verification.
+
+The local gate also does not recreate Actions-only job summaries or upload test artifacts: those were reporting steps, not checks. Playwright still writes its report and test-result directories locally, while every assertion that determined a workflow's success remains enforced.
+
+### Publishing images and releases
+
+`deploy.sh` replaces Docker image publishing. It builds and pushes the same multi-platform, provenance- and SBOM-enabled images to GHCR, optionally mirrors them to Docker Hub, then signs each image digest with cosign. It requires `GITHUB_TOKEN` and `GHCR_USERNAME`; set `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` together to enable Docker Hub. Set `PUBLISH_REF=main` or a `v*` tag when the current checkout does not identify the desired publication. Cosign performs its normal local OIDC authentication.
+
+```bash
+GITHUB_TOKEN=... GHCR_USERNAME=... PUBLISH_REF=main ./deploy.sh
+```
+
+`release.sh` replaces published-image verification and self-hoster bundle attachment. It checks out the named local release tag into a temporary directory, pins and smoke-tests the published image, demotes a failed GitHub release to pre-release, and uploads the version-pinned bundle and checksum. It requires `GH_TOKEN`, Docker, GitHub CLI, and an existing local tag.
+
+```bash
+GH_TOKEN=... ./release.sh v1.4.0
+```
+
+These scripts preserve the former workflows' recipes, but this fork's live publishing/release ownership has not been confirmed. The old Docker build used GitHub-hosted cache storage; the local publisher performs the same build without that Actions-only cache.
 
 Reqcore is designed to run on a single VPS. The reference deployment uses:
 
