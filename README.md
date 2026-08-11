@@ -294,13 +294,17 @@ setup.sh                      # One-time secret generator → writes .env
 
 ### Local quality gate
 
-GitHub Actions is permanently unavailable for the eMobility-Innovations organization by operator decision. The required gate for this fork is `./verify.sh`; run `./install-hooks.sh` once per clone (or let the organization policy package arm it) so every push runs the gate.
+GitHub Actions is permanently unavailable for the eMobility-Innovations organization by operator decision. The required push gate for this fork is `./verify.sh`; run `./install-hooks.sh` once per clone (or let the organization policy package arm it) so every push runs the gate.
 
-The gate installs dependencies and runs the unit tests, lint command when present, Nuxt typecheck, high-severity dependency audit, production build, Playwright E2E suite, complete Docker new-user/setup integration, and the check that prevents GitHub Actions workflows from returning. An absent Node, Docker, AWS CLI, browser, or other required tool fails the gate.
+`./verify.sh` installs dependencies and runs lint, Nuxt typecheck, unit tests, the high-severity dependency audit, the production build, and the check that prevents GitHub Actions workflows from returning. It requires Node.js and npm/npx and runs on every push.
+
+`./verify-e2e.sh` runs the Playwright E2E suite and complete Docker new-user/setup integration. It requires Docker with Compose v2, a running Docker daemon, the AWS CLI, and its other declared tools. Run it before a release and whenever touching E2E behavior; it is intentionally not invoked by `./verify.sh` or the pre-push hook.
+
+The scripts are separate because they mirror upstream's two separate workflows: PR validation and E2E tests. This preserves upstream's CI structure while keeping the ordinary push path runnable without a container stack.
 
 This is intentionally not the full upstream project's CI. Upstream-only Dependabot automerge, PR-title linting, and release-please automation manage upstream's GitHub process and have no local replacement in this fork. Publishing and release mutation are also excluded from the gate because shipping is not code verification.
 
-The local gate also does not recreate Actions-only job summaries or upload test artifacts: those were reporting steps, not checks. Playwright still writes its report and test-result directories locally, while every assertion that determined a workflow's success remains enforced.
+The local scripts also do not recreate Actions-only job summaries or upload test artifacts: those were reporting steps, not checks. Playwright still writes its report and test-result directories locally, while every assertion that determined a workflow's success remains enforced.
 
 ### Publishing images and releases
 
