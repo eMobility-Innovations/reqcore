@@ -26,8 +26,7 @@ export default defineEventHandler(async (event): Promise<{ conversation: Chatbot
   const session = await requireChatbotAccess(event)
   const orgId = session.session.activeOrganizationId
   const userId = session.user.id
-  const id = getRouterParam(event, 'id')
-  if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing id.' })
+  const { id } = await getValidatedRouterParams(event, z.object({ id: z.string().uuid() }).parse)
 
   const body = await readValidatedBody(event, bodySchema.parse)
 

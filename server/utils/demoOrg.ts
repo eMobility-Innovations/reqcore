@@ -16,6 +16,7 @@ import { isRailwayPreviewEnvironment } from './env'
 
 const demoOrgIdBySlug = new Map<string, string>()
 const demoOrgIdSet = new Set<string>()
+const DEFAULT_DEMO_ACCOUNT_EMAIL = 'demo@reqcore.com'
 const DEFAULT_PREVIEW_DEMO_ORG_SLUG = 'reqcore-demo'
 
 export interface DemoSlugsResult {
@@ -38,6 +39,52 @@ export function getConfiguredDemoSlugs(): DemoSlugsResult {
   }
 
   return { slugs: [...slugs], isExplicitlyConfigured }
+}
+
+export function getConfiguredDemoEmail(): string {
+  const email = process.env.LIVE_DEMO_EMAIL || process.env.DEMO_EMAIL || DEFAULT_DEMO_ACCOUNT_EMAIL
+
+  // Guard against stale applirank.com domain from old env vars.
+  if (email.endsWith('@applirank.com')) {
+    return DEFAULT_DEMO_ACCOUNT_EMAIL
+  }
+
+  return email.toLowerCase()
+}
+
+export function isDemoAccountEmail(email: string | null | undefined): boolean {
+  return email?.toLowerCase() === getConfiguredDemoEmail()
+}
+
+/**
+ * Demo-account isolation is intentionally a little stricter than demo-org
+ * write protection: the public demo identity should only ever operate in
+ * the seeded demo workspace, even if it has accidentally accumulated other
+ * memberships over time.
+ */
+export function getDemoAccountSlugs(): string[] {
+  const slugs = new Set(getConfiguredDemoSlugs().slugs)
+  slugs.add(env.DEMO_ORG_SLUG || DEFAULT_PREVIEW_DEMO_ORG_SLUG)
+  return [...slugs]
+}
+
+export async function getDemoAccountOrgIds(): Promise<Set<string>> {
+  return getDemoOrgIds(getDemoAccountSlugs())
+}
+
+export async function assertDemoAccountCanUseOrg(
+  email: string | null | undefined,
+  orgId: string | null | undefined,
+): Promise<void> {
+  if (!isDemoAccountEmail(email) || !orgId) return
+
+  const demoOrgIds = await getDemoAccountOrgIds()
+  if (demoOrgIds.has(orgId)) return
+
+  throw createError({
+    statusCode: 403,
+    statusMessage: 'The demo account can only access the demo workspace.',
+  })
 }
 
 /**

@@ -4,6 +4,21 @@ import type { H3Event } from 'h3'
 // In-memory sliding window rate limiter
 // ─────────────────────────────────────────────
 
+// Warn loudly at startup when the process appears to be running as one of
+// several replicas. Each replica holds its own in-memory state, so the
+// effective limit seen by any single client is maxRequests × replicaCount.
+// Under horizontal scaling, terminate rate limiting at the edge instead:
+// Cloudflare WAF, Caddy `rate_limit`, nginx `limit_req`, or a Redis-backed
+// limiter.
+const _replicaCount = Number(process.env.RAILWAY_REPLICA_COUNT ?? 0)
+if (_replicaCount > 1) {
+  console.warn(
+    `[rateLimit] WARNING: RAILWAY_REPLICA_COUNT=${_replicaCount}. `
+    + 'The in-memory rate limiter is NOT shared across replicas — effective limits are '
+    + `${_replicaCount}× higher than configured. Move rate limiting to the edge.`,
+  )
+}
+
 /**
  * Configuration for a rate limiter instance.
  *
@@ -27,10 +42,14 @@ interface RateLimitEntry {
  * Uses a sliding window algorithm — each request records a timestamp,
  * and only timestamps within the current window are counted.
  *
- * WARNING: This is an in-memory implementation that resets on restart and
- * does not share state across instances. For production at scale, replace
- * with a Redis-backed implementation (e.g. `@upstash/ratelimit`) to
- * handle multi-instance deployments.
+ * State is per-process and per-limiter: each call to createRateLimiter()
+ * builds its own Map, so two limiters never share buckets even when their
+ * window/max are identical.
+ *
+ * Reqcore is designed as a single-instance deployment (one Railway service,
+ * or one Docker Compose container for self-hosters). If it ever runs
+ * multiple replicas behind a load balancer, terminate rate limiting at the
+ * edge instead — Cloudflare WAF, Caddy `rate_limit`, or nginx `limit_req`.
  *
  * @example
  * ```ts
@@ -45,13 +64,6 @@ interface RateLimitEntry {
 export function createRateLimiter(config: RateLimitConfig) {
   const { windowMs, maxRequests, message = 'Too many requests, please try again later' } = config
   const store = new Map<string, RateLimitEntry>()
-
-  if (process.env.NODE_ENV === 'production') {
-    console.warn(
-      '[Reqcore] In-memory rate limiter active. State resets on restart and is not shared across instances. ' +
-      'For horizontal scaling, replace with a Redis-backed implementation (e.g. @upstash/ratelimit).',
-    )
-  }
 
   // Periodically prune stale entries to prevent unbounded memory growth
   const PRUNE_INTERVAL = Math.max(windowMs * 2, 60_000)
@@ -121,8 +133,10 @@ export function createRateLimiter(config: RateLimitConfig) {
  * TRUSTED_PROXY_IP env var to enable header-based IP extraction.
  */
 function getClientIp(event: H3Event): string {
-  // Only trust proxy headers when explicitly configured via validated env schema
-  const trustedProxy = env.TRUSTED_PROXY_IP
+  // Keep this global middleware independent of the complete application env
+  // schema. Otherwise one unrelated invalid variable turns every API response
+  // into a generic 500 before its route can report the actual problem.
+  const trustedProxy = process.env.TRUSTED_PROXY_IP?.trim()
   if (trustedProxy) {
     const socketIp = getRequestIP(event)
     if (socketIp === trustedProxy) {

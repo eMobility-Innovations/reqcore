@@ -1,4 +1,5 @@
 import { eq, and, isNull } from 'drizzle-orm'
+import { z } from 'zod'
 import { inviteLink } from '../../database/schema'
 
 /**
@@ -9,11 +10,7 @@ import { inviteLink } from '../../database/schema'
 export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { invitation: ['cancel'] })
   const orgId = session.session.activeOrganizationId
-  const linkId = getRouterParam(event, 'id')
-
-  if (!linkId) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing invite link ID' })
-  }
+  const { id: linkId } = await getValidatedRouterParams(event, z.object({ id: z.string().uuid() }).parse)
 
   const [revoked] = await db
     .update(inviteLink)

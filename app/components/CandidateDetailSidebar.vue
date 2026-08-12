@@ -9,6 +9,7 @@ import { usePreviewReadOnly } from '~/composables/usePreviewReadOnly'
 const props = defineProps<{
   applicationId: string
   open: boolean
+  initialTab?: 'overview' | 'documents' | 'responses' | 'ai_analysis' | 'timeline'
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +20,7 @@ const emit = defineEmits<{
 const { handlePreviewReadOnlyError } = usePreviewReadOnly()
 const toast = useToast()
 const { track } = useTrack()
-const { formatCandidateName } = useOrgSettings()
+const { formatCandidateName, formatDateTime } = useOrgSettings()
 
 // Detect if the job sub-nav bar is visible (adds 40px / 2.5rem)
 const route = useRoute()
@@ -35,7 +36,13 @@ const hasSubNav = computed(() => {
 // Tabs
 // ─────────────────────────────────────────────
 
-const activeTab = ref<'overview' | 'documents' | 'responses' | 'ai_analysis' | 'timeline'>('overview')
+const activeTab = ref<'overview' | 'documents' | 'responses' | 'ai_analysis' | 'timeline'>(
+  props.initialTab ?? 'overview',
+)
+
+watch(() => props.applicationId, () => {
+  activeTab.value = props.initialTab ?? 'overview'
+})
 
 // ─────────────────────────────────────────────
 // Fetch application detail
@@ -637,6 +644,19 @@ function formatInterviewDate(dateStr: string) {
                     {{ application.candidate.phone }}
                   </dd>
                 </div>
+                <div v-if="candidateData?.retention?.enabled">
+                  <dt class="text-xs font-medium text-surface-400 dark:text-surface-500 mb-1">
+                    Data retention
+                  </dt>
+                  <dd class="text-surface-800 dark:text-surface-200 font-medium">
+                    <template v-if="candidateData.retention.quarantinedAt">
+                      Quarantined · purge {{ formatDateTime(candidateData.retention.scheduledPurgeAt) }}
+                    </template>
+                    <template v-else>
+                      {{ candidateData.retention.status }} · {{ formatDateTime(candidateData.retention.expiresAt) }}
+                    </template>
+                  </dd>
+                </div>
               </dl>
             </div>
 
@@ -1061,20 +1081,21 @@ function formatInterviewDate(dateStr: string) {
             </div>
 
             <!-- Timeline list -->
-            <div v-else class="relative">
-              <!-- Vertical line -->
-              <div class="absolute left-[11px] top-2 bottom-2 w-px bg-surface-200 dark:bg-surface-700" />
-
+            <div v-else>
               <div
-                v-for="item in timelineItems"
+                v-for="(item, index) in timelineItems"
                 :key="item.id"
-                class="relative flex gap-3 py-2.5 group"
+                class="flex gap-3 py-2 group"
               >
-                <!-- Dot -->
-                <div class="relative z-10 mt-1 shrink-0">
+                <!-- Dot + connector -->
+                <div class="flex flex-col items-center shrink-0 mt-[3px]">
                   <div
-                    class="size-[9px] rounded-full ring-2 ring-white dark:ring-surface-900"
+                    class="size-[9px] rounded-full ring-2 ring-white dark:ring-surface-950 shrink-0"
                     :class="getTimelineActionColor(item.action)"
+                  />
+                  <div
+                    v-if="index < timelineItems.length - 1"
+                    class="w-px flex-1 min-h-[14px] bg-surface-200 dark:bg-surface-700 mt-1"
                   />
                 </div>
 

@@ -29,18 +29,18 @@ export function useCurrentOrg() {
    * Switch the active organization for the current session.
    * Reloads the app to reset all cached data.
    */
-  async function switchOrg(orgId: string) {
+  async function switchOrg(orgId: string, redirectTo?: string) {
     await authClient.organization.setActive({ organizationId: orgId })
     // Hard navigation ensures all component state is fully reset.
     // reloadNuxtApp() without force can soft-reload and leak stale state.
-    window.location.href = localePath('/dashboard')
+    window.location.href = redirectTo ?? localePath('/dashboard')
   }
 
   /**
    * Create a new organization and set it as active.
    * Navigates to the dashboard after creation.
    */
-  async function createOrg(data: { name: string; slug: string }) {
+  async function createOrg(data: { name: string; slug: string }, options?: { redirectTo?: string }) {
     const result = await authClient.organization.create({
       name: data.name,
       slug: data.slug,
@@ -56,7 +56,7 @@ export function useCurrentOrg() {
     }
 
     // Hard navigation ensures fresh session state is loaded (same pattern as switchOrg)
-    window.location.href = localePath('/dashboard')
+    window.location.href = options?.redirectTo ?? localePath('/dashboard')
   }
 
   // ═══════════════════════════════════════════

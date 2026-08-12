@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   Brain, Sparkles, SlidersHorizontal, Plus, Trash2, Loader2, Save, RotateCcw,
+  FileText, Mail, ListChecks, NotebookPen,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -66,7 +67,22 @@ const { data: criteriaData, status: criteriaFetchStatus, refresh: refreshCriteri
 )
 
 const scoringCriteria = ref<ScoringCriterionDraft[]>([])
-const hasUnsavedChanges = ref(false)
+// Serialize only the fields that get persisted, so dirty-tracking ignores
+// noise (e.g. array identity) and survives the post-save refetch.
+function serializeCriteria(list: any[]) {
+  return JSON.stringify((list ?? []).map((c) => ({
+    key: c.key,
+    name: c.name,
+    description: c.description ?? '',
+    category: c.category ?? 'custom',
+    maxScore: c.maxScore ?? 10,
+    weight: c.weight ?? 50,
+  })))
+}
+
+// Snapshot of the last server-confirmed state; dirty = current differs from it.
+const savedSnapshot = ref(serializeCriteria([]))
+const hasUnsavedChanges = computed(() => serializeCriteria(scoringCriteria.value) !== savedSnapshot.value)
 
 // Sync fetched criteria into editable state
 watch(criteriaData, (data) => {
@@ -79,14 +95,9 @@ watch(criteriaData, (data) => {
       maxScore: c.maxScore ?? 10,
       weight: c.weight ?? 50,
     }))
-    hasUnsavedChanges.value = false
+    savedSnapshot.value = serializeCriteria(scoringCriteria.value)
   }
 }, { immediate: true })
-
-// Track changes
-watch(scoringCriteria, () => {
-  hasUnsavedChanges.value = true
-}, { deep: true })
 
 // ─────────────────────────────────────────────
 // Auto-score toggle
@@ -112,6 +123,42 @@ async function toggleAutoScore() {
     autoScoreOnApply.value = !autoScoreOnApply.value
   } finally {
     isSavingAutoScore.value = false
+  }
+}
+
+// ─────────────────────────────────────────────
+// Analysis data sources (which context the AI reads)
+// ─────────────────────────────────────────────
+
+const DEFAULT_ANALYSIS_CONTEXT = { coverLetter: true, screeningAnswers: true, recruiterNotes: false }
+
+const analysisContext = ref({ ...DEFAULT_ANALYSIS_CONTEXT })
+const isSavingContext = ref(false)
+
+watch(job, (j) => {
+  if (j) analysisContext.value = { ...DEFAULT_ANALYSIS_CONTEXT, ...((j as any).analysisContext ?? {}) }
+}, { immediate: true })
+
+const contextSources = [
+  { key: 'coverLetter', label: 'Cover letter', description: 'The candidate\'s cover letter text, if provided.', icon: Mail },
+  { key: 'screeningAnswers', label: 'Screening question answers', description: 'Answers to the custom questions on this job\'s application form.', icon: ListChecks },
+  { key: 'recruiterNotes', label: 'Recruiter notes', description: 'Internal notes on the application. Off by default — enable to let the AI weigh your notes.', icon: NotebookPen },
+] as const
+
+async function saveAnalysisContext() {
+  isSavingContext.value = true
+  try {
+    await $fetch(`/api/jobs/${jobId}`, {
+      method: 'PATCH',
+      body: { analysisContext: analysisContext.value },
+    })
+    toast.success('Data sources updated')
+  } catch (err: any) {
+    toast.error('Failed to update data sources', { message: err?.data?.statusMessage })
+    // Re-sync from the last server state so the UI reflects reality.
+    if (job.value) analysisContext.value = { ...DEFAULT_ANALYSIS_CONTEXT, ...((job.value as any).analysisContext ?? {}) }
+  } finally {
+    isSavingContext.value = false
   }
 }
 
@@ -266,7 +313,7 @@ async function saveCriteria() {
         })),
       },
     })
-    hasUnsavedChanges.value = false
+    savedSnapshot.value = serializeCriteria(scoringCriteria.value)
     track('scoring_criteria_saved', { job_id: jobId, criteria_count: scoringCriteria.value.length })
     toast.success('Criteria saved', `${scoringCriteria.value.length} scoring criteria updated.`)
     await refreshCriteria()
@@ -290,7 +337,6 @@ function resetCriteria() {
   } else {
     scoringCriteria.value = []
   }
-  hasUnsavedChanges.value = false
 }
 </script>
 
@@ -314,12 +360,6 @@ function resetCriteria() {
 
     <template v-else-if="job">
       <!-- Header -->
-      <div class="mb-6">
-        <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-50">AI Analysis</h1>
-        <p class="text-sm text-surface-500 dark:text-surface-400 mt-1">
-          Configure how AI evaluates and scores candidates for <strong>{{ job.title }}</strong>.
-        </p>
-      </div>
 
       <!-- Empty state: mode selection -->
       <div v-if="scoringCriteria.length === 0" class="space-y-6">
@@ -436,7 +476,7 @@ function resetCriteria() {
           <div
             v-for="criterion in scoringCriteria"
             :key="criterion.key"
-            class="rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 p-4 transition-all hover:shadow-sm"
+            class="rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-4 transition-all hover:shadow-sm"
           >
             <div class="flex items-start justify-between gap-3 mb-3">
               <div class="flex-1 min-w-0">
@@ -501,7 +541,7 @@ function resetCriteria() {
           <button
             type="button"
             :disabled="isSaving || !hasUnsavedChanges"
-            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="saveCriteria"
           >
             <Loader2 v-if="isSaving" class="size-4 animate-spin" />
@@ -513,8 +553,8 @@ function resetCriteria() {
       </div>
 
       <!-- Custom criterion form -->
-      <div v-if="showCustomForm" class="rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/50 p-5 space-y-4 mt-6">
-        <h3 class="text-sm font-semibold text-surface-800 dark:text-surface-200">Add custom criterion</h3>
+      <div v-if="showCustomForm" class="rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-6 space-y-4 mt-6">
+        <h2 class="text-base font-semibold text-surface-900 dark:text-surface-100 mb-5">Add custom criterion</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-medium text-surface-700 dark:text-surface-300 mb-1">Name *</label>
@@ -523,14 +563,14 @@ function resetCriteria() {
               @input="customCriterionForm.key = autoGenerateKey(customCriterionForm.name)"
               type="text"
               placeholder="e.g. React Expertise"
-              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             />
           </div>
           <div>
             <label class="block text-xs font-medium text-surface-700 dark:text-surface-300 mb-1">Category</label>
             <select
               v-model="customCriterionForm.category"
-              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             >
               <option v-for="(label, key) in categoryLabels" :key="key" :value="key">{{ label }}</option>
             </select>
@@ -542,7 +582,7 @@ function resetCriteria() {
             v-model="customCriterionForm.description"
             rows="2"
             placeholder="Describe what the AI should evaluate for this criterion..."
-            class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
           />
         </div>
         <div class="grid grid-cols-2 gap-4">
@@ -553,7 +593,7 @@ function resetCriteria() {
               type="number"
               min="1"
               max="100"
-              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             />
           </div>
           <div>
@@ -563,7 +603,7 @@ function resetCriteria() {
               type="number"
               min="0"
               max="100"
-              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              class="w-full rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-2 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             />
           </div>
         </div>
@@ -571,14 +611,14 @@ function resetCriteria() {
           <button
             type="button"
             :disabled="!customCriterionForm.name"
-            class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="addCustomCriterion"
           >
             Add criterion
           </button>
           <button
             type="button"
-            class="px-4 py-2 text-sm font-medium text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 rounded-lg transition-colors"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-surface-300 dark:border-surface-700 px-4 py-2 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
             @click="showCustomForm = false"
           >
             Cancel
@@ -586,22 +626,76 @@ function resetCriteria() {
         </div>
       </div>
 
+      <!-- Analysis data sources -->
+      <div class="rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-6 mt-6">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-sm font-semibold text-surface-900 dark:text-surface-100">Candidate data & context</h3>
+            <p class="text-xs text-surface-400 dark:text-surface-500 mt-0.5">
+              Choose which information the AI reads when scoring candidates for this job.
+            </p>
+          </div>
+          <Loader2 v-if="isSavingContext" class="size-4 text-surface-400 animate-spin shrink-0 mt-0.5" />
+        </div>
+
+        <div class="space-y-2">
+          <!-- Resume — always included -->
+          <div class="flex items-start gap-3 rounded-lg border border-surface-200 dark:border-surface-800 bg-surface-50/60 dark:bg-surface-800/30 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked
+              disabled
+              class="mt-0.5 size-4 rounded border-surface-300 dark:border-surface-600 text-brand-600"
+            />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 text-sm font-medium text-surface-900 dark:text-surface-100">
+                <FileText class="size-3.5 text-surface-400" />
+                Resume
+                <span class="text-[10px] font-medium text-surface-400 uppercase tracking-wide">Always included</span>
+              </div>
+              <p class="text-xs text-surface-400 dark:text-surface-500 mt-0.5">
+                The candidate's resume is the backbone of every analysis and can't be turned off.
+              </p>
+            </div>
+          </div>
+
+          <!-- Toggleable sources -->
+          <label
+            v-for="src in contextSources"
+            :key="src.key"
+            class="flex items-start gap-3 rounded-lg border border-surface-200 dark:border-surface-800 px-3 py-2.5 cursor-pointer hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
+          >
+            <input
+              v-model="analysisContext[src.key]"
+              type="checkbox"
+              class="mt-0.5 size-4 rounded border-surface-300 dark:border-surface-600 text-brand-600 focus:ring-brand-500"
+              @change="saveAnalysisContext"
+            />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 text-sm font-medium text-surface-900 dark:text-surface-100">
+                <component :is="src.icon" class="size-3.5 text-surface-400" />
+                {{ src.label }}
+              </div>
+              <p class="text-xs text-surface-400 dark:text-surface-500 mt-0.5">{{ src.description }}</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <!-- Auto-score toggle -->
-      <div class="rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/50 p-5 mt-6">
+      <div class="rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-6 mt-6">
         <label class="flex items-start gap-3 cursor-pointer">
           <input
             v-model="autoScoreOnApply"
             type="checkbox"
-            class="mt-0.5 size-4 rounded border-surface-300 dark:border-surface-600 text-brand-600 focus:ring-brand-500 cursor-pointer"
+            class="size-4 rounded border-surface-300 dark:border-surface-600 text-brand-600 focus:ring-brand-500"
             @change="toggleAutoScore"
           />
           <div>
-            <span class="block text-sm font-semibold text-surface-900 dark:text-surface-100">
-              Automatically score every new applicant
-            </span>
-            <span class="text-xs text-surface-500 dark:text-surface-400 mt-0.5 block leading-relaxed">
+            <span class="text-sm font-medium text-surface-900 dark:text-surface-100">Automatically score every new applicant</span>
+            <p class="text-xs text-surface-400 dark:text-surface-500">
               When a candidate applies, AI will automatically analyze their resume against these criteria and assign a score. Requires an AI provider configured in settings plus a resume upload.
-            </span>
+            </p>
           </div>
         </label>
       </div>

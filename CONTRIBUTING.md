@@ -1,12 +1,13 @@
 # Contributing to Reqcore
 
-Thanks for contributing to Reqcore.
+Reqcore is open-source software. This guide explains how to set up a local development environment and contribute changes through GitHub.
 
 ## Before You Start
 
 - Read [PRODUCT.md](PRODUCT.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md) for product and technical context.
 - For bug reports and feature ideas, use GitHub Issues.
 - For security reports, do **not** open a public issue. Follow [SECURITY.md](SECURITY.md).
+- Keep pull requests focused. Small, reviewable changes are more likely to be merged quickly.
 
 ## Development Setup
 

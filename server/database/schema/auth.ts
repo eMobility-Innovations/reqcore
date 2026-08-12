@@ -20,6 +20,8 @@ export const user = pgTable('user', {
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
+  // Stripe plugin: links the user to their Stripe customer (nullable until first checkout)
+  stripeCustomerId: text('stripe_customer_id'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
@@ -78,8 +80,43 @@ export const organization = pgTable('organization', {
   slug: text('slug').notNull().unique(),
   logo: text('logo'),
   metadata: text('metadata'),
+  // Stripe plugin (organization customers): the org's Stripe customer id.
+  // Subscriptions are billed to the organization, not an individual member.
+  stripeCustomerId: text('stripe_customer_id'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
+
+// ─────────────────────────────────────────────
+// Stripe Plugin Table (org-scoped subscriptions)
+// ─────────────────────────────────────────────
+// Mirrors the schema declared by @better-auth/stripe. `referenceId` is the
+// organization id (subscriptions are org-scoped, flat org-wide pricing — no
+// per-seat billing). Managed entirely by the plugin via Stripe webhooks; the
+// app only reads from it. Field (property) names must match the plugin's
+// camelCase field names so the Drizzle adapter can map them.
+
+export const subscription = pgTable('subscription', {
+  id: text('id').primaryKey(),
+  plan: text('plan').notNull(),
+  referenceId: text('reference_id').notNull(),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  status: text('status').notNull().default('incomplete'),
+  periodStart: timestamp('period_start'),
+  periodEnd: timestamp('period_end'),
+  trialStart: timestamp('trial_start'),
+  trialEnd: timestamp('trial_end'),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
+  cancelAt: timestamp('cancel_at'),
+  canceledAt: timestamp('canceled_at'),
+  endedAt: timestamp('ended_at'),
+  seats: integer('seats'),
+  billingInterval: text('billing_interval'),
+  stripeScheduleId: text('stripe_schedule_id'),
+}, (t) => ([
+  index('subscription_reference_id_idx').on(t.referenceId),
+  index('subscription_stripe_customer_id_idx').on(t.stripeCustomerId),
+]))
 
 export const member = pgTable('member', {
   id: text('id').primaryKey(),

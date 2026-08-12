@@ -1,4 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { trackingLink } from '../../../database/schema'
 
 /** Tracking codes are 8-char base64url strings */
@@ -12,10 +13,10 @@ const TRACKING_CODE_RE = /^[A-Za-z0-9_-]{1,100}$/
  * Used when sharing direct tracking URLs.
  */
 export default defineEventHandler(async (event) => {
-  const code = getRouterParam(event, 'code')
-  if (!code || !TRACKING_CODE_RE.test(code)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid tracking code' })
-  }
+  const { code } = await getValidatedRouterParams(
+    event,
+    z.object({ code: z.string().regex(TRACKING_CODE_RE, 'Invalid tracking code') }).parse,
+  )
 
   const link = await db.query.trackingLink.findFirst({
     where: eq(trackingLink.code, code),

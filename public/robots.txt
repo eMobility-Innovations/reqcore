@@ -1,9 +1,12 @@
 User-Agent: *
 Allow: /jobs
 Allow: /jobs/
+Allow: /career/
 Disallow: /dashboard/
 Disallow: /auth/
 Disallow: /onboarding/
 Disallow: /join/
 Disallow: /api/
 Disallow: /ingest/
+
+Sitemap: https://app.reqcore.com/sitemap.xml

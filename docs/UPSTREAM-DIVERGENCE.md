@@ -14,9 +14,28 @@ PRs cannot be opened from this repository: it belongs to `hahzterry/reqcore`'s f
 
 Upstream requires a DCO sign-off on every commit (`git commit -s`) and a Conventional Commits PR title; both are enforced by their CI.
 
-## Deliberately removed upstream paths
+## Deliberate dependency deviations
 
-The following upstream-maintained paths are deliberately removed in this fork:
+Measured while syncing `main` onto tag `v1.6.0` on 2026-08-12. Each is a deviation from upstream's
+own `package.json`, kept because upstream's version does not pass this fork's gate. Remove any of
+them the moment upstream's own tree makes it unnecessary — a stale deviation is the thing this
+document exists to prevent.
+
+| deviation | why | when it goes |
+|---|---|---|
+| `ai`, `@ai-sdk/{anthropic,google,openai}` carry `<` ceilings | the TAIL of every current major is under advisory, and `@ai-sdk/provider-utils` 4.0.41+ pulls `undici ^5.29.0` — all of undici 5.x sits inside `GHSA-vrm6-8vpv-qv8q`, the one HIGH that fails `./verify.sh` | when the `ai` 7 / `@ai-sdk` 4 upgrade is reviewed and taken; the ceilings block genuine fixes too |
+| `unhead` override raised to `>=3.3.1` | upstream pins it at `2.1.13` while their own nuxt 4.4.8 asks for `^2.1.15`, and nuxt 4.5.2 — the first release outside the nuxt advisory — needs `^3.3.1`. The exact pin was already forcing their tree backwards | when upstream raises the pin themselves |
+| security overrides are ranges (`>=`), not exact pins | [reqcore-inc/reqcore#273](https://github.com/reqcore-inc/reqcore/pull/273); every floor is `max(ours, upstream's)`, so the form never lowers a version upstream reached | if #273 lands, this stops being a deviation |
+| `engines` + `.nvmrc` | [#272](https://github.com/reqcore-inc/reqcore/pull/272), pending | if #272 lands |
+| no CI badges in `README.md` | they point at workflows this fork deletes, so they would report an account failure forever | never — it follows from the workflow deletion |
+
+**The lockfile is generated with npm 11, and `npm ci` is then proved under npm 10.9.8 as well.**
+Both matter and neither is optional: `node:22.22-alpine` ships npm 10.9.8, so the Docker build runs
+`npm ci` under it — but npm 10.9.8's *resolver* hoists `cac@7` and cannot nest the `cac@6`
+`@bomb.sh/tab` requires, producing a lockfile its own `npm ci` then rejects. An npm 11-resolved
+lockfile satisfies both. A green `npm ci` is a claim about one npm version, never about the repo.
+
+## Deliberately removed upstream paths
 
 The following upstream-maintained paths are deliberately removed in this fork:
 

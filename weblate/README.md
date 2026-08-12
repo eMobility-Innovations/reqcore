@@ -277,7 +277,7 @@ Weblate is running.
 | Monolingual base language file | `i18n/locales/en.json` |
 | File format | `JSON nested structure file` |
 | Source language | `English` |
-| Translation license | `AGPL-3.0` |
+| Translation license | GNU AGPLv3 |
 
 4. Click **Save**
 

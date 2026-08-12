@@ -1,4 +1,7 @@
-import { test as base, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { test as base, type BrowserContext, type Page } from '@playwright/test'
+import postgres from 'postgres'
 
 /**
  * Shared test fixtures for Reqcore E2E tests.
@@ -31,6 +34,59 @@ type Fixtures = {
   authenticatedPage: Page
 }
 
+export function e2eDatabaseUrl(): string {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL
+
+  const envFile = readFileSync(join(process.cwd(), '.env'), 'utf8')
+  const line = envFile
+    .split(/\r?\n/)
+    .find(entry => entry.trim().startsWith('DATABASE_URL='))
+  const value = line?.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2')
+
+  if (!value) throw new Error('DATABASE_URL is required for authenticated E2E fixtures')
+  return value
+}
+
+async function verifyTestAccountEmail(email: string): Promise<void> {
+  const sql = postgres(e2eDatabaseUrl(), { max: 1 })
+  try {
+    const updated = await sql`
+      update "user"
+      set email_verified = true, updated_at = now()
+      where email = ${email}
+      returning id
+    `
+    if (updated.length !== 1) throw new Error(`Could not verify E2E account ${email}`)
+  }
+  finally {
+    await sql.end()
+  }
+}
+
+export async function declineAnalyticsConsent(context: BrowserContext) {
+  await context.addCookies([{
+    name: 'reqcore-consent',
+    value: 'denied',
+    url: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3333',
+  }])
+}
+
+export async function getPublishedApplicationLink(page: Page) {
+  await page.waitForFunction(() => {
+    return Array.from(document.querySelectorAll<HTMLInputElement>('input[readonly]'))
+      .some(input => /\/jobs\/[^/]+\/apply(?:$|[?#])/.test(input.value))
+  }, undefined, { timeout: 10_000 })
+
+  const applicationLink = await page.locator('input[readonly]').evaluateAll(inputs => {
+    return inputs
+      .map(input => (input as HTMLInputElement).value)
+      .find(value => /\/jobs\/[^/]+\/apply(?:$|[?#])/.test(value))
+  })
+
+  if (!applicationLink) throw new Error('Published application link input was not found')
+  return applicationLink
+}
+
 export const test = base.extend<Fixtures>({
   testAccount: [
     // eslint-disable-next-line no-empty-pattern
@@ -42,6 +98,8 @@ export const test = base.extend<Fixtures>({
   ],
 
   authenticatedPage: async ({ page, testAccount }, use) => {
+    await declineAnalyticsConsent(page.context())
+
     // Sign up
     await page.goto('/auth/sign-up')
     await page.waitForLoadState('networkidle')
@@ -58,6 +116,10 @@ export const test = base.extend<Fixtures>({
       ),
       page.getByRole('button', { name: 'Sign up' }).click(),
     ])
+
+    // Outbound critical flows require a verified owner. The test environment
+    // has no mailbox from which to consume Better Auth's verification link.
+    await verifyTestAccountEmail(testAccount.email)
 
     // After sign-up the app navigates to /onboarding/create-org, but the
     // auth middleware may not yet recognise the freshly-set session cookie
@@ -78,12 +140,12 @@ export const test = base.extend<Fixtures>({
           resp => resp.url().includes('/api/auth/sign-in') && resp.status() === 200,
           { timeout: 30_000 },
         ),
-        page.getByRole('button', { name: 'Sign in' }).click(),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
       ])
 
-      // Sign-in navigates to /dashboard, then require-org middleware
-      // redirects to /onboarding/create-org (user has no org yet)
-      await page.waitForURL('**/onboarding/**', { waitUntil: 'commit', timeout: 30_000 })
+      // The API response confirms the session cookie is set. Navigate directly
+      // instead of depending on the sign-in page's client redirect timing.
+      await page.goto('/onboarding/create-org')
     }
 
     // Wait for the org-creation form to render (loading spinner may show first)
@@ -91,8 +153,49 @@ export const test = base.extend<Fixtures>({
     await page.getByLabel('Organization name').fill(testAccount.orgName)
     await page.getByRole('button', { name: 'Create organization' }).click()
 
-    // Wait for redirect to dashboard (use 'commit' for SPA navigation)
-    await page.waitForURL('**/dashboard**', { waitUntil: 'commit' })
+    // Creating the org performs a hard navigation. Under load, the freshly
+    // updated session can race that navigation and land on sign-in instead.
+    // Brand-new orgs are redirected through /onboarding/welcome (survey) first.
+    await page.waitForURL(
+      url => url.pathname.includes('/dashboard') || url.pathname.includes('/auth/sign-in') || url.pathname.includes('/onboarding/welcome'),
+      { waitUntil: 'commit', timeout: 30_000 },
+    )
+
+    // Skip the onboarding survey — navigate directly to the dashboard.
+    if (page.url().includes('/onboarding/welcome')) {
+      await page.goto('/dashboard')
+    }
+
+    if (page.url().includes('/auth/sign-in')) {
+      await page.getByLabel('Email').fill(testAccount.email)
+      await page.getByLabel('Password').fill(testAccount.password)
+      await Promise.all([
+        page.waitForResponse(
+          resp => resp.url().includes('/api/auth/sign-in') && resp.status() === 200,
+          { timeout: 30_000 },
+        ),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+      ])
+      await page.goto('/dashboard')
+    }
+
+    // Do not hand the page to the test while dashboard auth middleware is
+    // still settling; otherwise the test's first navigation can race a
+    // delayed redirect back to sign-in.
+    await page.waitForLoadState('networkidle')
+    if (page.url().includes('/auth/sign-in')) {
+      await page.getByLabel('Email').fill(testAccount.email)
+      await page.getByLabel('Password').fill(testAccount.password)
+      await Promise.all([
+        page.waitForResponse(
+          resp => resp.url().includes('/api/auth/sign-in') && resp.status() === 200,
+          { timeout: 30_000 },
+        ),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+      ])
+      await page.goto('/dashboard')
+      await page.waitForLoadState('networkidle')
+    }
 
     await use(page)
   },

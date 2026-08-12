@@ -29,16 +29,19 @@ export function initLoggerProvider(): void {
       'deployment.environment': process.env.RAILWAY_ENVIRONMENT_NAME || 'development',
     }),
     processors: [
-      // sdk-logs 0.221 takes the exporter as an option, not a positional arg.
-      new BatchLogRecordProcessor({
-        exporter: new OTLPLogExporter({
+      // Positional, because this tree is on @opentelemetry/sdk-logs 0.219. The options-object
+      // form belongs to 0.221, which this fork briefly carried; the 0.221 bump existed to escape
+      // an @opentelemetry/core <2.8.0 advisory that upstream's own `resources` ^2.8.0 already
+      // clears, so the bump — and the constructor change with it — is not owed here.
+      new BatchLogRecordProcessor(
+        new OTLPLogExporter({
           url: `${host}/i/v1/logs`,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }),
-      }),
+      ),
     ],
   })
 

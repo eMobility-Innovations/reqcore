@@ -430,6 +430,17 @@ function formatFileSize(bytes: number | null | undefined): string {
           </dl>
         </div>
 
+        <!-- Custom properties (Notion-style) -->
+        <div class="rounded-lg border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-4 mb-4">
+          <h2 class="text-sm font-semibold text-surface-700 dark:text-surface-200 mb-2 px-2">Properties</h2>
+          <PropertyBlock
+            entity-type="candidate"
+            :entity-id="candidateId"
+            :entries="(candidate.properties ?? []) as import('~~/shared/properties').PropertyEntry[]"
+            @refresh="refresh()"
+          />
+        </div>
+
         <!-- Tabs -->
         <div class="border-b border-surface-200 dark:border-surface-800 mb-4">
           <div class="flex gap-1">
@@ -862,8 +873,9 @@ function formatFileSize(bytes: number | null | undefined): string {
           <div class="relative bg-white dark:bg-surface-900 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
             <h3 class="text-lg font-semibold text-surface-900 dark:text-surface-50 mb-2">Delete Candidate</h3>
             <p class="text-sm text-surface-600 dark:text-surface-400 mb-4">
-              Are you sure you want to delete <strong>{{ formatCandidateName(candidate) }}</strong>?
-              This will also delete all their applications and documents. This action cannot be undone.
+              Remove <strong>{{ formatCandidateName(candidate) }}</strong> from your candidate list?
+              Their data is kept and can be restored from
+              <strong>Settings → Privacy &amp; Retention</strong>. Nothing is permanently erased here.
             </p>
             <div class="flex justify-end gap-2">
               <button

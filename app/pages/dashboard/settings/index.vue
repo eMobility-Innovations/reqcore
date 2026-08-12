@@ -60,12 +60,17 @@ async function handleSaveOrg() {
   saveSuccess.value = false
 
   try {
-    await authClient.organization.update({
+    const result = await authClient.organization.update({
       data: {
         name: trimmedName,
         slug: trimmedSlug,
       },
     })
+
+    if (result.error) {
+      throw new Error(result.error.message || 'Failed to update organization')
+    }
+
     track('org_settings_saved')
     saveSuccess.value = true
     setTimeout(() => { saveSuccess.value = false }, 3000)
@@ -97,10 +102,15 @@ async function handleDeleteOrg() {
   deleteError.value = ''
 
   try {
-    track('org_deleted')
-    await authClient.organization.delete({
+    const result = await authClient.organization.delete({
       organizationId: activeOrg.value!.id,
     })
+
+    if (result.error) {
+      throw new Error(result.error.message || 'Failed to delete organization')
+    }
+
+    track('org_deleted')
     // Use navigateTo for Nuxt-managed navigation, then force reload
     // so all cached org state is cleared.
     const localePath = useLocalePath()

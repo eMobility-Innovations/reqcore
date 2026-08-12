@@ -28,6 +28,11 @@ export default defineEventHandler(async (event) => {
         statusMessage: `Cannot transition from '${existing.status}' to '${body.status}'`,
       })
     }
+
+    // Re-opening a role counts against the plan's active-role limit.
+    if (body.status === 'open' && existing.status !== 'open') {
+      await assertActiveRoleLimit(orgId)
+    }
   }
 
   // Regenerate slug when title or custom slug changes
@@ -55,9 +60,11 @@ export default defineEventHandler(async (event) => {
       salaryNegotiable: job.salaryNegotiable,
       remoteStatus: job.remoteStatus,
       validThrough: job.validThrough,
+      phoneRequirement: job.phoneRequirement,
       requireResume: job.requireResume,
       requireCoverLetter: job.requireCoverLetter,
       autoScoreOnApply: job.autoScoreOnApply,
+      analysisContext: job.analysisContext,
       experienceLevel: job.experienceLevel,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,

@@ -267,12 +267,12 @@ Goal: Teams can work together on hiring decisions.
 
 ## Phase 4: Production Readiness
 
-Goal: Ready for real teams to self-host in production.
+Goal: Ready for real teams to use in production, whether self-hosted or deployed on managed infrastructure.
 
 ### Milestone 13: Hardening
 
-- [x] Production deployment — Railway (managed Nuxt service, Railway PostgreSQL, Railway Storage Buckets)
-- [x] HTTPS/TLS — Railway auto-TLS + Cloudflare CDN (Full strict SSL)
+- [x] Production deployment — Docker Compose reference stack plus managed-platform support
+- [x] HTTPS/TLS — reverse-proxy friendly deployment with Cloudflare/Railway-compatible configuration
 - [x] DNS + CDN — Cloudflare Free plan with DDoS protection and AI bot blocking
 - [ ] Backup & restore (Postgres + S3 bucket)
 - [x] Rate limiting — in-memory sliding window (`server/utils/rateLimit.ts`), applied to public apply endpoint
@@ -301,7 +301,7 @@ Goal: Ready for real teams to self-host in production.
 - [x] Full OG + Twitter Card meta on all public pages (landing, job board, job detail, roadmap, blog)
 - [x] `noindex` on private pages (auth, onboarding, apply form, confirmation)
 - [x] ISR route rules — `/jobs/**` (3600s), prerender `/`, `/roadmap`, `/blog/**`
-- [x] Landing page H1 + copy optimized for "open source ATS" / "applicant tracking system" keywords
+- [x] Landing page H1 + copy optimized for "applicant tracking system" / high-applicant-volume keywords
 - [x] Blog seed article: "Self-Hosted vs Cloud ATS: Pros, Cons, and When to Switch"
 - [x] Blog listing + detail pages with dark theme, navigation links
 - [x] `@tailwindcss/typography` for styled `prose` content rendering

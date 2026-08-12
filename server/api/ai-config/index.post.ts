@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { aiConfig } from '../../database/schema'
+import { aiConfig, platformAiConfig } from '../../database/schema'
 import { createAiConfigSchema } from '../../utils/schemas/scoring'
 import { encrypt } from '../../utils/encryption'
 
@@ -14,6 +14,10 @@ import { encrypt } from '../../utils/encryption'
 export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { scoring: ['create'] })
   const orgId = session.session.activeOrganizationId
+
+  // Bring-your-own AI key (BYOK) configuration is available on every plan.
+  await assertPlanFeature(orgId, 'byok')
+
   const body = await readValidatedBody(event, createAiConfigSchema.parse)
 
   const apiKeyEncrypted = encrypt(body.apiKey, env.BETTER_AUTH_SECRET)
@@ -35,6 +39,9 @@ export default defineEventHandler(async (event) => {
       await tx.update(aiConfig)
         .set({ isDefaultAnalysis: false })
         .where(eq(aiConfig.organizationId, orgId))
+      await tx.update(platformAiConfig)
+        .set({ isDefaultAnalysis: false, updatedAt: new Date() })
+        .where(eq(platformAiConfig.organizationId, orgId))
     }
 
     const [row] = await tx.insert(aiConfig)

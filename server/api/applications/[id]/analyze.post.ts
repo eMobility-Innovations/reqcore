@@ -1,13 +1,17 @@
 import { eq, and } from 'drizzle-orm'
 import {
   application, scoringCriterion, criterionScore,
-  analysisRun, document, candidate,
+  analysisRun, document,
 } from '../../../database/schema'
-import { scoreApplication, computeCompositeScore } from '../../../utils/ai/scoring'
+import { scoreApplication, computeCompositeScore, hasScorableCandidateMaterial } from '../../../utils/ai/scoring'
 import type { CriterionDefinition } from '../../../utils/ai/scoring'
-import type { SupportedProvider } from '../../../utils/ai/provider'
-import { loadAiConfig } from '../../../utils/ai/loadConfig'
+import { resolveAnalysisProvider } from '../../../utils/ai/resolveProvider'
+import { assertPlatformBudget, BudgetExceededError, budgetErrorToHttp } from '../../../utils/ai/budget'
+import { computeCostUsdMicros } from '../../../utils/ai/pricing'
+import { captureAiGeneration } from '../../../utils/ai/observability'
 import { extractResumeText } from '../../../utils/resume-parser'
+import { fetchScreeningAnswers, DEFAULT_ANALYSIS_CONTEXT } from '../../../utils/ai/analysisContext'
+import { parseAndPersistDocument } from '../../../utils/document-parser'
 import { createRateLimiter } from '../../../utils/rateLimit'
 import { z } from 'zod'
 
@@ -40,7 +44,7 @@ export default defineEventHandler(async (event) => {
         columns: { id: true, firstName: true, lastName: true },
       },
       job: {
-        columns: { id: true, title: true, description: true },
+        columns: { id: true, title: true, description: true, analysisContext: true },
       },
     },
   })
@@ -49,11 +53,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Application not found' })
   }
 
-  // Fetch AI config (override → analysis default → 422)
-  const config = await loadAiConfig(orgId, {
-    purpose: 'analysis',
-    preferId: parsedBody?.aiConfigId ?? null,
-  })
+  // Resolve provider: org's own key (BYOK) → platform key (OpenRouter) → 422.
+  const resolved = await resolveAnalysisProvider(orgId, { preferId: parsedBody?.aiConfigId ?? null })
 
   // Fetch scoring criteria for this job
   const criteria = await db.select().from(scoringCriterion)
@@ -72,6 +73,8 @@ export default defineEventHandler(async (event) => {
   // Fetch candidate documents (resume text)
   const docs = await db.select({
     id: document.id,
+    storageKey: document.storageKey,
+    mimeType: document.mimeType,
     parsedContent: document.parsedContent,
     type: document.type,
   })
@@ -82,21 +85,19 @@ export default defineEventHandler(async (event) => {
     ))
 
   const resumeDoc = docs.find(d => d.type === 'resume')
-  const resumeText = extractResumeText(resumeDoc?.parsedContent)
+  let resumeText = extractResumeText(resumeDoc?.parsedContent)
 
-  if (!resumeText) {
-    // Resume document exists but parsing failed or was incomplete
-    if (resumeDoc) {
-      throw createError({
-        statusCode: 422,
-        statusMessage: 'Resume was uploaded but text extraction failed. Try re-parsing the document.',
-        data: { code: 'PARSE_FAILED', documentId: resumeDoc.id },
+  if (!resumeText && resumeDoc) {
+    try {
+      const parsedContent = await parseAndPersistDocument(resumeDoc)
+      resumeText = extractResumeText(parsedContent)
+    } catch (err) {
+      logWarn('application_analysis.resume_reparse_failed', {
+        application_id: applicationId,
+        document_id: resumeDoc.id,
+        error_message: err instanceof Error ? err.message : String(err),
       })
     }
-    throw createError({
-      statusCode: 422,
-      statusMessage: 'No resume found for this candidate. Upload a resume first.',
-    })
   }
 
   if (!app.job.description) {
@@ -115,23 +116,51 @@ export default defineEventHandler(async (event) => {
     weight: c.weight,
   }))
 
-  const providerConfig = {
-    provider: config.provider as SupportedProvider,
-    model: config.model,
-    apiKeyEncrypted: config.apiKeyEncrypted,
-    baseUrl: config.baseUrl,
-    maxTokens: config.maxTokens,
+  // Money-safety gate: only platform-paid runs are budget-capped. Fail-closed —
+  // if spend can't be read, the run is refused rather than risk an unbounded bill.
+  if (resolved.billingMode === 'platform') {
+    try {
+      await assertPlatformBudget(orgId)
+    } catch (err) {
+      if (err instanceof BudgetExceededError) throw budgetErrorToHttp(err)
+      throw createError({ statusCode: 503, statusMessage: 'AI budget check failed. Please try again later.' })
+    }
   }
 
+  // Resume is included when available; the job controls the other evidence sources.
+  const analysisContext = app.job.analysisContext ?? DEFAULT_ANALYSIS_CONTEXT
+  const screeningAnswers = analysisContext.screeningAnswers
+    ? await fetchScreeningAnswers(applicationId, orgId)
+    : null
+  const materials = {
+    resumeText,
+    coverLetterText: analysisContext.coverLetter ? app.coverLetterText : null,
+    applicationNotes: analysisContext.recruiterNotes ? app.notes : null,
+    screeningAnswers,
+  }
+
+  if (!hasScorableCandidateMaterial(materials)) {
+    if (resumeDoc) {
+      throw createError({
+        statusCode: 422,
+        statusMessage: 'No usable candidate material found. Resume text extraction failed and the other enabled sources are empty.',
+        data: { code: 'PARSE_FAILED', documentId: resumeDoc.id },
+      })
+    }
+    throw createError({
+      statusCode: 422,
+      statusMessage: 'No usable candidate material found. Add a resume, cover letter, screening response, or enabled recruiter note.',
+    })
+  }
+
+  const startedAt = Date.now()
   let result
   try {
-    result = await scoreApplication(providerConfig, {
+    result = await scoreApplication(resolved.providerConfig, {
       jobTitle: app.job.title,
       jobDescription: app.job.description,
       criteria: criteriaDefinitions,
-      resumeText,
-      coverLetterText: app.coverLetterText,
-      applicationNotes: app.notes,
+      ...materials,
     })
   } catch (err: any) {
     // Record failed analysis run
@@ -139,11 +168,19 @@ export default defineEventHandler(async (event) => {
       organizationId: orgId,
       applicationId,
       status: 'failed',
-      provider: config.provider,
-      model: config.model,
+      provider: resolved.provider,
+      model: resolved.model,
+      billingMode: resolved.billingMode,
       criteriaSnapshot: criteriaDefinitions as any,
       errorMessage: err?.message ?? 'Unknown error',
       scoredById: session.user.id,
+    })
+
+    captureAiGeneration({
+      orgId, userId: session.user.id, applicationId, feature: 'application_analysis',
+      provider: resolved.provider, model: resolved.model, billingMode: resolved.billingMode,
+      promptTokens: 0, completionTokens: 0, costUsdMicros: null,
+      latencyMs: Date.now() - startedAt, status: 'failed',
     })
 
     throw createError({
@@ -151,6 +188,10 @@ export default defineEventHandler(async (event) => {
       statusMessage: `AI analysis failed: ${err?.message ?? 'Unknown error'}`,
     })
   }
+
+  const costUsdMicros = computeCostUsdMicros(
+    resolved.model, result.usage.promptTokens, result.usage.completionTokens,
+  )
 
   // Compute composite score
   const compositeScore = computeCompositeScore(criteriaDefinitions, result.scoring.evaluations)
@@ -190,14 +231,24 @@ export default defineEventHandler(async (event) => {
       organizationId: orgId,
       applicationId,
       status: 'completed',
-      provider: config.provider,
-      model: config.model,
+      provider: resolved.provider,
+      model: resolved.model,
+      billingMode: resolved.billingMode,
       criteriaSnapshot: criteriaDefinitions as any,
       compositeScore,
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
+      costUsdMicros,
       scoredById: session.user.id,
     }).returning()
+  })
+
+  captureAiGeneration({
+    orgId, userId: session.user.id, applicationId, feature: 'application_analysis',
+    provider: resolved.provider, model: resolved.model, billingMode: resolved.billingMode,
+    promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens,
+    costUsdMicros, latencyMs: Date.now() - startedAt, status: 'completed',
+    traceId: run!.id,
   })
 
   recordActivity({
@@ -208,7 +259,7 @@ export default defineEventHandler(async (event) => {
     resourceId: applicationId,
     metadata: {
       compositeScore,
-      model: config.model,
+      model: resolved.model,
       criterionCount: result.scoring.evaluations.length,
     },
   })

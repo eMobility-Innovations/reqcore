@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures'
+import { test, expect, declineAnalyticsConsent, getPublishedApplicationLink } from '../fixtures'
 
 /**
  * Critical flow: Candidate applies to a published job that contains every
@@ -193,7 +193,7 @@ test.describe('Candidate Application Flow — All Custom Question Field Types', 
 
     // Read the application link from the readonly input in the success card.
     // The link has the form: https://<host>/jobs/<slug>/apply
-    const applicationLink = await page.locator('input[readonly]').inputValue()
+    const applicationLink = await getPublishedApplicationLink(page)
     expect(applicationLink).toMatch(/\/jobs\/[^/]+\/apply(?:$|[?#])/)
     const slugMatch = applicationLink.match(/\/jobs\/([^/]+)\/apply(?:$|[?#])/)
     const jobSlug = slugMatch?.[1] ?? ''
@@ -202,6 +202,7 @@ test.describe('Candidate Application Flow — All Custom Question Field Types', 
     // ── Candidate flow: fresh unauthenticated context ─────────────────────────
 
     const candidateContext = await browser.newContext()
+    await declineAnalyticsConsent(candidateContext)
     const candidatePage = await candidateContext.newPage()
 
     // Unique identity per run + retry — static emails cause a 409 "already
@@ -308,8 +309,12 @@ test.describe('Candidate Application Flow — All Custom Question Field Types', 
       waitUntil: 'commit',
       timeout: 15_000,
     })
-    await expect(candidatePage.getByRole('heading', { name: 'Application Submitted!' })).toBeVisible()
-    await expect(candidatePage.getByText(JOB_TITLE)).toBeVisible()
+    await expect(candidatePage.getByRole('heading', { name: 'Application received' })).toBeVisible()
+    await expect(candidatePage.getByText(JOB_TITLE).first()).toBeVisible()
+    await expect(candidatePage.getByRole('link', { name: /Back to .+ careers/ })).toHaveAttribute(
+      'href',
+      /\/career\//,
+    )
 
     await candidatePage.close()
     await candidateContext.close()
@@ -459,11 +464,19 @@ test.describe('Candidate Application Flow — All Custom Question Field Types', 
     // Confirm all 9 question responses are shown in the "Application Responses" section
     await expect(page.getByText(/Application Responses\s*\(\s*9\s*\)/i)).toBeVisible()
 
-    // Spot-check a few response values on the detail page
-    await expect(page.getByText('5').first()).toBeVisible() // short_text: years of experience
-    await expect(page.getByText('Remote').first()).toBeVisible() // single_select
-    await expect(page.getByText('Yes').first()).toBeVisible() // checkbox
-    await expect(page.getByText('https://github.com/jane-doe').first()).toBeVisible() // url
+    // Spot-check a few response values on the detail page. Scope each assertion
+    // to its question block so generic values such as "5" do not match hidden
+    // pagination <option> elements elsewhere on the page.
+    async function assertDetailResponse(questionLabel: string, expected: string) {
+      const label = page.getByText(questionLabel, { exact: false }).first()
+      await expect(label).toBeVisible()
+      await expect(label.locator('..').locator('dd')).toContainText(expected)
+    }
+
+    await assertDetailResponse('Years of experience', '5') // short_text
+    await assertDetailResponse('Preferred work style', 'Remote') // single_select
+    await assertDetailResponse('Agree to background check', 'Yes') // checkbox
+    await assertDetailResponse('GitHub profile URL', 'https://github.com/jane-doe') // url
   })
 })
 
@@ -508,11 +521,12 @@ test.describe('Candidate Application — Required Cover Letter Validation', () =
     await expect(page.getByRole('heading', { name: 'Your job is live!' })).toBeVisible({ timeout: 20_000 })
 
     // Capture the application link
-    const applicationLink = await page.locator('input[readonly]').inputValue()
+    const applicationLink = await getPublishedApplicationLink(page)
     expect(applicationLink).toMatch(/\/jobs\/[^/]+\/apply(?:$|[?#])/)
 
     // ── Candidate flow ────────────────────────────────────────────────────────
     const candidateContext = await browser.newContext()
+    await declineAnalyticsConsent(candidateContext)
     const candidatePage = await candidateContext.newPage()
 
     await candidatePage.goto(applicationLink)

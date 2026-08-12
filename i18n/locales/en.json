@@ -8,6 +8,7 @@
   "home": {
     "nav": {
       "features": "Features",
+      "pricing": "Pricing",
       "openPositions": "Open Positions",
       "roadmap": "Roadmap",
       "blog": "Blog",
@@ -16,35 +17,250 @@
       "logIn": "Log in",
       "signUp": "Sign up"
     },
-    "badge": "Open Source ATS for Developer Teams",
+    "badge": "Hosted ATS for modern hiring teams",
     "hero": {
-      "titleLine1": "Your hiring.",
-      "titleHighlight": "Your infrastructure.",
-      "subtitle": "Open-source applicant tracking built for teams that self-host.",
+      "titleLine1": "Hiring software",
+      "titleHighlight": "that starts free.",
+      "subtitle": "Track your first role in Reqcore with 1 active job and 300 applicants free. Upgrade only when your hiring pipeline grows.",
       "goToDashboard": "Go to Dashboard",
       "signIn": "Sign in",
       "createAccount": "Create account",
       "ctaDemo": "Try live demo",
-      "ctaStart": "View on GitHub",
-      "hint": "Early open-source release — try the demo with sample data, no sign-up needed"
+      "ctaStart": "Start free",
+      "hint": "Try the demo with sample data, no sign-up needed"
     },
     "pillars": {
       "yourData": {
-        "label": "Your data",
-        "desc": "Postgres + MinIO on your infrastructure. Nothing leaves your network."
+        "label": "One free active job",
+        "desc": "Run a real hiring process before you pay. No credit card needed."
       },
       "auditable": {
-        "label": "Fully auditable",
-        "desc": "Open source — every line of matching logic is visible and overridable."
+        "label": "300 applicants included",
+        "desc": "Enough room to test sourcing, screening, and pipeline flow on a real role."
       },
       "unlimitedSeats": {
         "label": "Unlimited seats",
-        "desc": "Add your whole hiring team. No per-seat pricing, ever."
+        "desc": "Add your hiring team without turning every collaborator into another seat charge."
       }
     },
     "footer": {
-      "source": "Source",
-      "tagline": "Reqcore — open-source applicant tracking"
+      "source": "Pricing",
+      "tagline": "Reqcore — applicant tracking that starts free"
+    }
+  },
+  "retention": {
+    "title": "Privacy & Retention",
+    "description": "Configure privacy notices and automatically remove candidate data after your retention period.",
+    "policy": {
+      "title": "Retention policy",
+      "description": "Measured from the candidate's latest recruitment activity.",
+      "enable": "Enable automated retention",
+      "enableHelp": "Expired candidates are quarantined before permanent erasure. Existing data receives a review window first.",
+      "months": "Retention period (months)",
+      "quarantineDays": "Quarantine window (days)",
+      "quarantineHelp": "Recoverable grace period before permanent erasure."
+    },
+    "privacy": {
+      "title": "Application-form privacy notice",
+      "description": "Shown to applicants on your public job application form.",
+      "url": "Privacy policy URL",
+      "email": "Privacy contact email",
+      "text": "Notice text (optional)",
+      "defaultNotice": "By applying, you agree that {organization} may process your application data to evaluate your candidacy. Your data is retained only as long as necessary and then deleted.",
+      "thisOrganization": "this organization",
+      "policyLink": "Privacy policy",
+      "contactLabel": "Contact"
+    },
+    "save": {
+      "button": "Save changes",
+      "saving": "Saving…",
+      "saved": "Saved!",
+      "permission": "Only admins and owners can change these settings."
+    },
+    "review": {
+      "title": "Upcoming deletions",
+      "description": "Candidates expiring, in quarantine, or exempt from retention.",
+      "instanceDisabled": "Automated cleanup is paused by the instance administrator. Policies and review data remain unchanged.",
+      "loading": "Loading…",
+      "empty": "Nothing to review. No candidates are nearing their retention limit.",
+      "expires": "Expires {date}",
+      "erases": "Erases {date}",
+      "exemptUntil": "Exempt until {date}"
+    },
+    "status": {
+      "expiring": "Expiring",
+      "expired": "Expired",
+      "quarantined": "Quarantined",
+      "exempt": "Exempt"
+    },
+    "actions": {
+      "export": "Export data",
+      "restore": "Restore",
+      "hold": "Add legal hold",
+      "clearHold": "Clear legal hold",
+      "erase": "Erase now",
+      "holdPrompt": "Reason for the legal hold (for example, an active dispute):",
+      "eraseConfirm": "This permanently erases {name} and all their data, and cannot be undone. Type the candidate's full name to confirm:"
+    },
+    "errors": {
+      "save": "Failed to save settings",
+      "restore": "Failed to restore candidate",
+      "hold": "Failed to add legal hold",
+      "clearHold": "Failed to clear legal hold",
+      "erase": "Failed to erase candidate",
+      "eraseNameMismatch": "The name didn't match. The candidate was not erased."
+    }
+  },
+  "career": {
+    "eyebrow": "Careers",
+    "metaTitle": "{name} — Careers",
+    "openRoles": "Open roles",
+    "headlineWithName": "Open roles at {name}",
+    "openRolesCount": "{count} open role | {count} open roles",
+    "filteredOf": "{shown} of {total}",
+    "totalCount": "{total} total",
+    "searchPlaceholder": "Search roles",
+    "allLocations": "All locations",
+    "allTypes": "All types",
+    "clear": "Clear",
+    "emptyTitle": "No open positions",
+    "emptyBody": "There are no open roles right now. Check back soon.",
+    "noMatchesTitle": "No roles match your filters",
+    "clearFilters": "Clear filters",
+    "notFoundTitle": "Career page not available",
+    "notFoundBody": "This company doesn't have a public career page right now.",
+    "offlineTitle": "{name} isn't accepting applications right now",
+    "offlineBody": "Please check back later.",
+    "posted": "Posted {date}",
+    "poweredBy": "Powered by",
+    "type": {
+      "full_time": "Full-time",
+      "part_time": "Part-time",
+      "contract": "Contract",
+      "internship": "Internship"
+    },
+    "experience": {
+      "junior": "Junior",
+      "mid": "Mid-level",
+      "senior": "Senior",
+      "lead": "Lead"
+    },
+    "remote": {
+      "remote": "Remote",
+      "hybrid": "Hybrid",
+      "onsite": "On-site"
+    }
+  },
+  "jobs": {
+    "list": {
+      "metaTitle": "Open Positions — Job Board",
+      "metaDescription": "Browse open job positions on Reqcore and apply directly. Find your next career opportunity with companies that value transparency.",
+      "ogTitle": "Open Positions — Reqcore Job Board",
+      "ogDescription": "Browse open job positions and apply directly. Powered by the open-source ATS you actually own.",
+      "twitterDescription": "Browse open job positions and apply directly.",
+      "title": "Open Positions",
+      "subtitle": "Browse our current openings and find your next opportunity.",
+      "searchPlaceholder": "Search jobs by title or location…",
+      "allTypes": "All types",
+      "loading": "Loading positions…",
+      "errorLoad": "Failed to load jobs. Please try again.",
+      "retry": "Retry",
+      "emptyTitle": "No open positions",
+      "emptyFiltered": "No jobs match your current filters. Try adjusting your search.",
+      "emptyDefault": "There are no open positions right now. Check back soon!",
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page} of {total}",
+      "totalCount": "{count} open position | {count} open positions"
+    },
+    "detail": {
+      "metaTitleFallback": "Job Details — Reqcore",
+      "metaDescriptionFallback": "View job details and apply",
+      "hiringNow": "Hiring Now",
+      "metaApplyFor": "Apply for",
+      "metaAt": "at",
+      "metaIn": "in",
+      "notFoundTitle": "Job Not Found",
+      "notFoundBody": "This position may no longer be available or is not currently accepting applications.",
+      "browseAll": "Browse all positions",
+      "allPositions": "All positions",
+      "negotiable": "Negotiable",
+      "postedOn": "Posted {date}",
+      "applyNow": "Apply Now",
+      "applyTime": "Takes a few minutes · No account required",
+      "seeAllRoles": "See all open roles at {name}",
+      "careerPageTitle": "Careers at {name}",
+      "careerPageDescription": "Visit the company career page and view all open roles",
+      "companyLogoAlt": "{name} logo",
+      "aboutRole": "About this role",
+      "questionsTitle": "Application questions",
+      "questionsIntro": "You'll be asked to answer {count} additional question when you apply. | You'll be asked to answer {count} additional questions when you apply.",
+      "required": "Required",
+      "readyTitle": "Ready to apply?",
+      "readyBody": "Submit your application in just a few minutes.",
+      "applyForPosition": "Apply for this position"
+    },
+    "apply": {
+      "metaApplyPrefix": "Apply",
+      "metaTitleFallback": "Apply — Reqcore",
+      "metaDescriptionFallback": "Submit your application",
+      "notFoundTitle": "Position Not Found",
+      "notFoundBody": "This position may have been filled or is no longer accepting applications.",
+      "backHome": "Back to Home",
+      "backToDetails": "Back to job details",
+      "genericError": "Something went wrong. Please try again.",
+      "validation": {
+        "firstNameRequired": "First name is required",
+        "lastNameRequired": "Last name is required",
+        "emailRequired": "Email is required",
+        "emailInvalid": "Invalid email address",
+        "phoneRequired": "Phone number is required",
+        "resumeRequired": "Resume/CV is required",
+        "coverLetterRequired": "Cover letter is required",
+        "coverLetterTooLong": "Cover letter must be 10,000 characters or fewer.",
+        "fileTooLarge": "File too large. Maximum 10 MB.",
+        "fieldRequired": "This field is required"
+      }
+    },
+    "confirmation": {
+      "metaTitle": "Application Submitted — Reqcore",
+      "title": "Application received",
+      "thanksWithTitle": "Thanks for applying for {title}. Your details are now with the hiring team.",
+      "thanksPlain": "Thanks for applying. Your details are now with the hiring team.",
+      "received": "Sent successfully",
+      "backToCareerPage": "Back to {name} careers",
+      "browseMore": "Browse more positions",
+      "backHome": "Back to Home"
+    },
+    "form": {
+      "cardTitle": "Your application",
+      "requiredHint": "Fields marked with {mark} are required.",
+      "firstName": "First Name",
+      "firstNamePlaceholder": "Jane",
+      "lastName": "Last Name",
+      "lastNamePlaceholder": "Doe",
+      "email": "Email",
+      "emailPlaceholder": "you{'@'}example.com",
+      "phone": "Phone",
+      "optional": "(optional)",
+      "phonePlaceholder": "+1 (555) 123-4567",
+      "resume": "Resume / CV",
+      "resumeHelp": "PDF, DOC, or DOCX — max 10 MB",
+      "change": "Change",
+      "chooseFile": "Choose file",
+      "coverLetter": "Cover Letter",
+      "coverLetterPlaceholder": "Tell us why you're interested in this role…",
+      "coverLetterMax": "Max 10,000 characters.",
+      "additionalQuestions": "Additional questions",
+      "submit": "Submit Application",
+      "submitting": "Submitting…",
+      "confidential": "Your information is kept confidential."
+    },
+    "question": {
+      "selectOption": "Select an option…",
+      "yes": "Yes",
+      "chooseFileHint": "Choose file (PDF, DOC, DOCX — max 10 MB)",
+      "urlPlaceholder": "https://…"
     }
   }
 }

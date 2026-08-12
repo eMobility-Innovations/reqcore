@@ -35,6 +35,12 @@ const {
   loadMore,
 } = useTimeline()
 
+// The org-wide activity timeline is a Team+ entitlement (mirrors the server
+// gate on /api/activity-log/timeline). Per-candidate history stays on every plan.
+const { hasFeature, status: billingStatus } = usePlanFeature()
+const canUse = computed(() => hasFeature('activityTimeline'))
+const locked = computed(() => billingStatus.value != null && !canUse.value)
+
 // ─────────────────────────────────────────────
 // Search
 // ─────────────────────────────────────────────
@@ -110,8 +116,17 @@ function setDateRef(date: string, isToday: boolean, el: any) {
   if (isToday) todayRef.value = htmlEl
 }
 
-onMounted(async () => {
-  track('timeline_viewed')
+const hasInitialized = ref(false)
+
+// Only hit the gated timeline endpoint once the org is known to be entitled.
+// Billing status may still be resolving at mount, so this also runs from a
+// watcher when `canUse` flips true.
+async function initTimeline() {
+  // Wait until billing status is known AND the org is entitled, so free orgs
+  // never fire a doomed 402 (hasFeature is optimistically true while loading).
+  if (hasInitialized.value || billingStatus.value == null || !canUse.value) return
+  hasInitialized.value = true
+
   const dateParam = route.query.date as string | undefined
   if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
     targetDate.value = dateParam
@@ -135,7 +150,14 @@ onMounted(async () => {
       await nextTick()
     }
   }
+}
+
+onMounted(() => {
+  track('timeline_viewed')
+  initTimeline()
 })
+
+watch([canUse, billingStatus], () => { initTimeline() })
 
 // ─────────────────────────────────────────────
 // Filters
@@ -415,7 +437,7 @@ function getEventDescription(item: TimelineItem): string {
       </div>
 
       <!-- Filter pills -->
-      <div class="mt-3 flex items-center gap-1.5 flex-wrap">
+      <div v-if="!locked" class="mt-3 flex items-center gap-1.5 flex-wrap">
         <button
           v-for="f in filters"
           :key="f.key ?? 'all'"
@@ -431,7 +453,7 @@ function getEventDescription(item: TimelineItem): string {
       </div>
 
       <!-- Search bar -->
-      <div class="mt-3 relative">
+      <div v-if="!locked" class="mt-3 relative">
         <div class="relative">
           <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-surface-400 dark:text-surface-500 pointer-events-none" />
           <input
@@ -451,8 +473,16 @@ function getEventDescription(item: TimelineItem): string {
       </div>
     </div>
 
+    <!-- ─── Plan gate (Team+) ─── -->
+    <FeatureLockCard
+      v-if="locked"
+      feature="activityTimeline"
+      title="Unlock the activity timeline"
+      description="See every job, candidate, application, and interview event across your organization in one searchable, chronological feed."
+    />
+
     <!-- ─── Loading skeleton ─── -->
-    <div v-if="isLoading" class="space-y-4">
+    <div v-else-if="isLoading" class="space-y-4">
       <div v-for="i in 3" :key="i">
         <div class="h-4 w-28 bg-surface-200 dark:bg-surface-700 rounded animate-pulse mb-2" />
         <div class="space-y-1">
@@ -589,7 +619,7 @@ function getEventDescription(item: TimelineItem): string {
 
           <!-- Events for this day, grouped by purpose -->
           <div class="ml-3.5 pl-5 space-y-3 mt-1">
-            <div v-for="section in group.sections" :key="section.jobId ?? section.type" class="rounded-lg border border-surface-150 dark:border-surface-800 bg-white dark:bg-surface-900/60 overflow-hidden">
+            <div v-for="section in group.sections" :key="section.jobId ?? section.type" class="rounded-lg border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900/60 overflow-hidden">
               <!-- Section header (collapsible) -->
               <button
                 class="flex items-center gap-2 px-3 py-2 w-full border-b border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/40 cursor-pointer hover:bg-surface-100/60 dark:hover:bg-surface-800/60 transition-colors"

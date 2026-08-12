@@ -8,6 +8,7 @@
   "home": {
     "nav": {
       "features": "Fonctionnalités",
+      "pricing": "Tarifs",
       "openPositions": "Postes ouverts",
       "roadmap": "Feuille de route",
       "blog": "Blog",
@@ -16,35 +17,250 @@
       "logIn": "Se connecter",
       "signUp": "S'inscrire"
     },
-    "badge": "ATS Open Source pour les équipes de développeurs",
+    "badge": "Hosted ATS for modern hiring teams",
     "hero": {
-      "titleLine1": "Votre recrutement.",
-      "titleHighlight": "Votre infrastructure.",
-      "subtitle": "Suivi de candidatures open source conçu pour les équipes qui auto-hébergent.",
+      "titleLine1": "Hiring software",
+      "titleHighlight": "that starts free.",
+      "subtitle": "Track your first role in Reqcore with 1 active job and 300 applicants free. Upgrade only when your hiring pipeline grows.",
       "goToDashboard": "Aller au tableau de bord",
       "signIn": "Se connecter",
       "createAccount": "Créer un compte",
       "ctaDemo": "Essayer la démo",
-      "ctaStart": "Voir sur GitHub",
-      "hint": "Version open source précoce — essayez la démo avec des données d'exemple, sans inscription"
+      "ctaStart": "Start free",
+      "hint": "Try the demo with sample data, no sign-up needed"
     },
     "pillars": {
       "yourData": {
-        "label": "Vos données",
-        "desc": "Postgres + MinIO sur votre infrastructure. Rien ne quitte votre réseau."
+        "label": "One free active job",
+        "desc": "Run a real hiring process before you pay. No credit card needed."
       },
       "auditable": {
-        "label": "Entièrement auditable",
-        "desc": "Open source — chaque ligne de logique de matching est visible et modifiable."
+        "label": "300 applicants included",
+        "desc": "Enough room to test sourcing, screening, and pipeline flow on a real role."
       },
       "unlimitedSeats": {
         "label": "Utilisateurs illimités",
-        "desc": "Ajoutez toute votre équipe de recrutement. Pas de tarification par siège, jamais."
+        "desc": "Add your hiring team without turning every collaborator into another seat charge."
       }
     },
     "footer": {
-      "source": "Code source",
-      "tagline": "Reqcore — suivi de candidatures open source"
+      "source": "Pricing",
+      "tagline": "Reqcore — applicant tracking that starts free"
+    }
+  },
+  "retention": {
+    "title": "Confidentialité et conservation",
+    "description": "Configurez les avis de confidentialité et supprimez automatiquement les données des candidats après la durée de conservation.",
+    "policy": {
+      "title": "Politique de conservation",
+      "description": "Calculée depuis la dernière activité du processus de recrutement.",
+      "enable": "Activer la conservation automatisée",
+      "enableHelp": "Les candidats arrivés à échéance sont mis en quarantaine avant l'effacement définitif. Les données existantes bénéficient d'abord d'une période de contrôle.",
+      "months": "Durée de conservation (mois)",
+      "quarantineDays": "Période de quarantaine (jours)",
+      "quarantineHelp": "Délai récupérable avant l'effacement définitif."
+    },
+    "privacy": {
+      "title": "Avis de confidentialité du formulaire",
+      "description": "Affiché aux candidats sur le formulaire de candidature public.",
+      "url": "URL de la politique de confidentialité",
+      "email": "E-mail du contact confidentialité",
+      "text": "Texte de l'avis (facultatif)",
+      "defaultNotice": "En postulant, vous acceptez que {organization} traite vos données de candidature afin d'évaluer votre profil. Vos données ne sont conservées que le temps nécessaire, puis supprimées.",
+      "thisOrganization": "cette organisation",
+      "policyLink": "Politique de confidentialité",
+      "contactLabel": "Contact"
+    },
+    "save": {
+      "button": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Enregistré !",
+      "permission": "Seuls les administrateurs et propriétaires peuvent modifier ces paramètres."
+    },
+    "review": {
+      "title": "Suppressions à venir",
+      "description": "Candidats arrivant à échéance, en quarantaine ou exemptés.",
+      "instanceDisabled": "Le nettoyage automatique est suspendu par l'administrateur de l'instance. Les politiques et les données de contrôle restent inchangées.",
+      "loading": "Chargement…",
+      "empty": "Rien à vérifier. Aucun candidat n'approche de sa limite de conservation.",
+      "expires": "Expire le {date}",
+      "erases": "Effacement le {date}",
+      "exemptUntil": "Exempté jusqu'au {date}"
+    },
+    "status": {
+      "expiring": "Bientôt expiré",
+      "expired": "Expiré",
+      "quarantined": "En quarantaine",
+      "exempt": "Exempté"
+    },
+    "actions": {
+      "export": "Exporter les données",
+      "restore": "Restaurer",
+      "hold": "Ajouter un gel juridique",
+      "clearHold": "Lever le gel juridique",
+      "erase": "Effacer maintenant",
+      "holdPrompt": "Motif du gel juridique (par exemple, un litige en cours) :",
+      "eraseConfirm": "Cette action efface définitivement {name} et toutes ses données, et est irréversible. Saisissez le nom complet du candidat pour confirmer :"
+    },
+    "errors": {
+      "save": "Impossible d'enregistrer les paramètres",
+      "restore": "Impossible de restaurer le candidat",
+      "hold": "Impossible d'ajouter le gel juridique",
+      "clearHold": "Impossible de lever le gel juridique",
+      "erase": "Impossible d'effacer le candidat",
+      "eraseNameMismatch": "Le nom ne correspond pas. Le candidat n'a pas été effacé."
+    }
+  },
+  "career": {
+    "eyebrow": "Carrières",
+    "metaTitle": "{name} — Carrières",
+    "openRoles": "Postes ouverts",
+    "headlineWithName": "Postes ouverts chez {name}",
+    "openRolesCount": "{count} poste ouvert | {count} postes ouverts",
+    "filteredOf": "{shown} sur {total}",
+    "totalCount": "{total} au total",
+    "searchPlaceholder": "Rechercher des postes",
+    "allLocations": "Tous les lieux",
+    "allTypes": "Tous les types",
+    "clear": "Effacer",
+    "emptyTitle": "Aucun poste ouvert",
+    "emptyBody": "Aucun poste ouvert pour le moment. Revenez bientôt.",
+    "noMatchesTitle": "Aucun poste ne correspond à vos filtres",
+    "clearFilters": "Effacer les filtres",
+    "notFoundTitle": "Page carrières indisponible",
+    "notFoundBody": "Cette entreprise n'a pas de page carrières publique pour le moment.",
+    "offlineTitle": "{name} n'accepte pas de candidatures pour le moment",
+    "offlineBody": "Merci de revenir plus tard.",
+    "posted": "Publié le {date}",
+    "poweredBy": "Propulsé par",
+    "type": {
+      "full_time": "Temps plein",
+      "part_time": "Temps partiel",
+      "contract": "Contrat",
+      "internship": "Stage"
+    },
+    "experience": {
+      "junior": "Junior",
+      "mid": "Intermédiaire",
+      "senior": "Senior",
+      "lead": "Lead"
+    },
+    "remote": {
+      "remote": "Télétravail",
+      "hybrid": "Hybride",
+      "onsite": "Sur site"
+    }
+  },
+  "jobs": {
+    "list": {
+      "metaTitle": "Postes ouverts — Offres d'emploi",
+      "metaDescription": "Parcourez les postes ouverts sur Reqcore et postulez directement. Trouvez votre prochaine opportunité de carrière auprès d'entreprises qui valorisent la transparence.",
+      "ogTitle": "Postes ouverts — Offres d'emploi Reqcore",
+      "ogDescription": "Parcourez les postes ouverts et postulez directement. Propulsé par l'ATS open source qui vous appartient vraiment.",
+      "twitterDescription": "Parcourez les postes ouverts et postulez directement.",
+      "title": "Postes ouverts",
+      "subtitle": "Parcourez nos offres actuelles et trouvez votre prochaine opportunité.",
+      "searchPlaceholder": "Rechercher des postes par titre ou lieu…",
+      "allTypes": "Tous les types",
+      "loading": "Chargement des postes…",
+      "errorLoad": "Échec du chargement des postes. Veuillez réessayer.",
+      "retry": "Réessayer",
+      "emptyTitle": "Aucun poste ouvert",
+      "emptyFiltered": "Aucun poste ne correspond à vos filtres actuels. Essayez d'ajuster votre recherche.",
+      "emptyDefault": "Aucun poste ouvert pour le moment. Revenez bientôt !",
+      "previous": "Précédent",
+      "next": "Suivant",
+      "pageOf": "Page {page} sur {total}",
+      "totalCount": "{count} poste ouvert | {count} postes ouverts"
+    },
+    "detail": {
+      "metaTitleFallback": "Détails du poste — Reqcore",
+      "metaDescriptionFallback": "Consultez les détails du poste et postulez",
+      "hiringNow": "Recrutement en cours",
+      "metaApplyFor": "Postulez pour",
+      "metaAt": "chez",
+      "metaIn": "à",
+      "notFoundTitle": "Poste introuvable",
+      "notFoundBody": "Ce poste n'est peut-être plus disponible ou n'accepte plus de candidatures actuellement.",
+      "browseAll": "Parcourir tous les postes",
+      "allPositions": "Tous les postes",
+      "negotiable": "Négociable",
+      "postedOn": "Publié le {date}",
+      "applyNow": "Postuler maintenant",
+      "applyTime": "Quelques minutes suffisent · Aucun compte requis",
+      "seeAllRoles": "Voir tous les postes ouverts chez {name}",
+      "careerPageTitle": "Carrières chez {name}",
+      "careerPageDescription": "Consultez la page carrière de l'entreprise et tous les postes ouverts",
+      "companyLogoAlt": "Logo de {name}",
+      "aboutRole": "À propos de ce poste",
+      "questionsTitle": "Questions de candidature",
+      "questionsIntro": "Il vous sera demandé de répondre à {count} question supplémentaire lors de votre candidature. | Il vous sera demandé de répondre à {count} questions supplémentaires lors de votre candidature.",
+      "required": "Obligatoire",
+      "readyTitle": "Prêt à postuler ?",
+      "readyBody": "Soumettez votre candidature en quelques minutes seulement.",
+      "applyForPosition": "Postuler pour ce poste"
+    },
+    "apply": {
+      "metaApplyPrefix": "Candidature",
+      "metaTitleFallback": "Postuler — Reqcore",
+      "metaDescriptionFallback": "Soumettez votre candidature",
+      "notFoundTitle": "Poste introuvable",
+      "notFoundBody": "Ce poste a peut-être déjà été pourvu ou n'accepte plus de candidatures.",
+      "backHome": "Retour à l'accueil",
+      "backToDetails": "Retour aux détails du poste",
+      "genericError": "Une erreur s'est produite. Veuillez réessayer.",
+      "validation": {
+        "firstNameRequired": "Le prénom est requis",
+        "lastNameRequired": "Le nom est requis",
+        "emailRequired": "L'e-mail est requis",
+        "emailInvalid": "Adresse e-mail invalide",
+        "phoneRequired": "Le numéro de téléphone est requis",
+        "resumeRequired": "Le CV est requis",
+        "coverLetterRequired": "La lettre de motivation est requise",
+        "coverLetterTooLong": "La lettre de motivation ne doit pas dépasser 10 000 caractères.",
+        "fileTooLarge": "Fichier trop volumineux. Maximum 10 Mo.",
+        "fieldRequired": "Ce champ est obligatoire"
+      }
+    },
+    "confirmation": {
+      "metaTitle": "Candidature envoyée — Reqcore",
+      "title": "Candidature reçue",
+      "thanksWithTitle": "Merci d'avoir postulé au poste de {title}. Vos informations sont désormais entre les mains de l'équipe de recrutement.",
+      "thanksPlain": "Merci pour votre candidature. Vos informations sont désormais entre les mains de l'équipe de recrutement.",
+      "received": "Envoyée avec succès",
+      "backToCareerPage": "Retour aux carrières chez {name}",
+      "browseMore": "Voir plus de postes",
+      "backHome": "Retour à l'accueil"
+    },
+    "form": {
+      "cardTitle": "Votre candidature",
+      "requiredHint": "Les champs marqués d'un {mark} sont obligatoires.",
+      "firstName": "Prénom",
+      "firstNamePlaceholder": "Jeanne",
+      "lastName": "Nom",
+      "lastNamePlaceholder": "Dupont",
+      "email": "E-mail",
+      "emailPlaceholder": "vous{'@'}exemple.com",
+      "phone": "Téléphone",
+      "optional": "(facultatif)",
+      "phonePlaceholder": "+33 6 12 34 56 78",
+      "resume": "CV",
+      "resumeHelp": "PDF, DOC ou DOCX — 10 Mo max",
+      "change": "Modifier",
+      "chooseFile": "Choisir un fichier",
+      "coverLetter": "Lettre de motivation",
+      "coverLetterPlaceholder": "Dites-nous pourquoi ce poste vous intéresse…",
+      "coverLetterMax": "10 000 caractères maximum.",
+      "additionalQuestions": "Questions complémentaires",
+      "submit": "Envoyer la candidature",
+      "submitting": "Envoi en cours…",
+      "confidential": "Vos informations restent confidentielles."
+    },
+    "question": {
+      "selectOption": "Sélectionner une option…",
+      "yes": "Oui",
+      "chooseFileHint": "Choisir un fichier (PDF, DOC, DOCX — 10 Mo max)",
+      "urlPlaceholder": "https://…"
     }
   }
 }

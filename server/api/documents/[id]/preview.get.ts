@@ -1,4 +1,5 @@
 import { eq, and } from 'drizzle-orm'
+import { z } from 'zod'
 import { GetObjectCommand } from '@aws-sdk/client-s3'
 import { document } from '../../../database/schema'
 
@@ -22,10 +23,7 @@ export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { document: ['read'] })
   const orgId = session.session.activeOrganizationId
 
-  const documentId = getRouterParam(event, 'id')
-  if (!documentId) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing document ID' })
-  }
+  const { id: documentId } = await getValidatedRouterParams(event, z.object({ id: z.string().uuid() }).parse)
 
   // Query scoped by BOTH id AND organizationId — prevents IDOR
   const doc = await db.query.document.findFirst({

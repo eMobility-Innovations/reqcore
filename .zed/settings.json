@@ -1,0 +1,37 @@
+{
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/.jj",
+    "**/CVS",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/.classpath",
+    "**/.settings",
+    "**/node_modules",
+    "**/.nuxt",
+    "**/.output",
+    "**/dist",
+    "**/build",
+    "**/coverage",
+    "**/playwright-report",
+    "**/test-results"
+  ],
+  "lsp": {
+    "vtsls": {
+      "settings": {
+        "typescript": {
+          "tsserver": {
+            "maxTsServerMemory": 2048
+          }
+        },
+        "javascript": {
+          "tsserver": {
+            "maxTsServerMemory": 2048
+          }
+        }
+      }
+    }
+  }
+}

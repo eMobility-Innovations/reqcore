@@ -1,4 +1,5 @@
 import { eq, and } from 'drizzle-orm'
+import { z } from 'zod'
 import { joinRequest } from '../../../database/schema'
 
 /**
@@ -9,11 +10,7 @@ import { joinRequest } from '../../../database/schema'
 export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { invitation: ['cancel'] })
   const orgId = session.session.activeOrganizationId
-  const requestId = getRouterParam(event, 'id')
-
-  if (!requestId) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing request ID' })
-  }
+  const { id: requestId } = await getValidatedRouterParams(event, z.object({ id: z.string().uuid() }).parse)
 
   const [rejected] = await db
     .update(joinRequest)

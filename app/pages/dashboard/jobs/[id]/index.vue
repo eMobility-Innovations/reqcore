@@ -5,8 +5,13 @@ import {
   Pencil, Trash2, Globe, ChevronDown, X,
   Video, Building2, Code2, UsersRound, Save, Check, MapPin, Users, Plus,
   CheckCircle2, XCircle, AlertTriangle, ArrowUpDown, ListFilter,
-  Maximize2, Minimize2, Brain, Loader2, History,
+  Maximize2, Minimize2, Brain, History, SlidersHorizontal,
+  ChevronLeft, ChevronRight, UnfoldHorizontal, FoldHorizontal,
+  StickyNote, MoreHorizontal, Inbox,
 } from 'lucide-vue-next'
+import type { Component } from 'vue'
+import type { Interview, InterviewMutationResult } from '~/composables/useInterviews'
+import type { PropertyEntry, PropertyFilter } from '~~/shared/properties'
 import { usePreviewReadOnly } from '~/composables/usePreviewReadOnly'
 import { APPLICATION_STATUS_TRANSITIONS, INTERVIEW_STATUS_TRANSITIONS } from '~~/shared/status-transitions'
 
@@ -22,6 +27,7 @@ const { handlePreviewReadOnlyError } = usePreviewReadOnly()
 const { track } = useTrack()
 const toast = useToast()
 const { formatPersonName } = useOrgSettings()
+const { reportStatus, reportCandidateUpdate } = useInterviewMutationFeedback()
 
 // ─────────────────────────────────────────────
 // Job data (with update/delete support)
@@ -33,34 +39,23 @@ const { job: jobData, status: jobFetchStatus, error: jobError } = useJob(jobId)
 // Applications data
 // ─────────────────────────────────────────────
 
-const {
-  data: appData,
-  status: appFetchStatus,
-  error: appError,
-  refresh: refreshApps,
-} = useFetch('/api/applications', {
-  key: `pipeline-apps-${jobId}`,
-  query: { jobId, limit: 100 },
-  headers: useRequestHeaders(['cookie']),
-})
-
 const PIPELINE_STATUSES = ['new', 'screening', 'interview', 'offer', 'hired', 'rejected'] as const
 type PipelineStatus = typeof PIPELINE_STATUSES[number]
-
-const applications = computed(() => appData.value?.data ?? [])
 
 // Read initial pipeline stage from URL query param (?stage=screening)
 const initialStage = PIPELINE_STATUSES.includes(route.query.stage as any)
   ? (route.query.stage as PipelineStatus)
   : 'new'
 const focusStatus = ref<PipelineStatus>(initialStage)
-
-const focusedApplications = computed(() =>
-  applications.value.filter((application) => application.status === focusStatus.value),
-)
-
-// Search within the focused list
 const searchTerm = ref('')
+const debouncedSearchTerm = ref('')
+let searchDebounceTimer: ReturnType<typeof setTimeout>
+watch(searchTerm, (value) => {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    debouncedSearchTerm.value = value.trim()
+  }, 250)
+})
 
 // ─────────────────────────────────────────────
 // Filters & Sorting
@@ -73,20 +68,23 @@ type InterviewFilter = 'all' | 'has-interview' | 'no-interview'
 const sortBy = ref<SortOption>('score-desc')
 const scoreFilter = ref<ScoreFilter>('all')
 const interviewFilter = ref<InterviewFilter>('all')
+const propertyFilters = ref<PropertyFilter[]>([])
 const showSortPanel = ref(false)
 const showFilterPanel = ref(false)
 
-const hasActiveFilters = computed(() => scoreFilter.value !== 'all' || interviewFilter.value !== 'all')
+const hasActiveFilters = computed(() => scoreFilter.value !== 'all' || interviewFilter.value !== 'all' || propertyFilters.value.length > 0)
 const activeFilterCount = computed(() => {
   let count = 0
   if (scoreFilter.value !== 'all') count++
   if (interviewFilter.value !== 'all') count++
+  count += propertyFilters.value.length
   return count
 })
 
 function clearFilters() {
   scoreFilter.value = 'all'
   interviewFilter.value = 'all'
+  propertyFilters.value = []
 }
 
 const sortOptions: { value: SortOption; label: string }[] = [
@@ -122,74 +120,44 @@ function selectSort(option: SortOption) {
   showSortPanel.value = false
 }
 
+const PIPELINE_PAGE_SIZE = 50
+const page = ref(1)
+const applicationQuery = computed(() => ({
+  jobId,
+  status: focusStatus.value,
+  page: page.value,
+  limit: PIPELINE_PAGE_SIZE,
+  ...(debouncedSearchTerm.value && { search: debouncedSearchTerm.value }),
+  ...(scoreFilter.value !== 'all' && { score: scoreFilter.value }),
+  ...(interviewFilter.value !== 'all' && { interview: interviewFilter.value }),
+  ...(propertyFilters.value.length > 0 && { propertyFilters: JSON.stringify(propertyFilters.value) }),
+  sort: sortBy.value,
+}))
+
+const {
+  data: appData,
+  status: appFetchStatus,
+  error: appError,
+  refresh: refreshApps,
+} = useFetch('/api/applications', {
+  key: `pipeline-apps-${jobId}`,
+  query: applicationQuery,
+  headers: useRequestHeaders(['cookie']),
+})
+
+const applications = computed(() => appData.value?.data ?? [])
+const focusedApplicationTotal = computed(() => appData.value?.total ?? 0)
+const totalPages = computed(() => Math.max(1, Math.ceil(focusedApplicationTotal.value / PIPELINE_PAGE_SIZE)))
+const pageStart = computed(() => focusedApplicationTotal.value === 0 ? 0 : ((page.value - 1) * PIPELINE_PAGE_SIZE) + 1)
+const pageEnd = computed(() => Math.min(focusedApplicationTotal.value, page.value * PIPELINE_PAGE_SIZE))
+
 function closePanels() {
   showSortPanel.value = false
   showFilterPanel.value = false
   showOverviewDropdown.value = false
 }
 
-const filteredApplications = computed(() => {
-  let result = focusedApplications.value
-
-  // Text search
-  if (searchTerm.value.trim()) {
-    const term = searchTerm.value.toLowerCase()
-    result = result.filter((app) => {
-      const name = `${app.candidateFirstName} ${app.candidateLastName}`.toLowerCase()
-      const email = (app.candidateEmail ?? '').toLowerCase()
-      return name.includes(term) || email.includes(term)
-    })
-  }
-
-  // Score filter
-  if (scoreFilter.value !== 'all') {
-    result = result.filter((app) => {
-      switch (scoreFilter.value) {
-        case 'high': return app.score != null && app.score >= 75
-        case 'medium': return app.score != null && app.score >= 40 && app.score < 75
-        case 'low': return app.score != null && app.score < 40
-        case 'none': return app.score == null
-        default: return true
-      }
-    })
-  }
-
-  // Interview filter
-  if (interviewFilter.value !== 'all') {
-    result = result.filter((app) => {
-      const hasInterview = applicationsWithInterviews.value.has(app.id)
-      return interviewFilter.value === 'has-interview' ? hasInterview : !hasInterview
-    })
-  }
-
-  // Sorting
-  return [...result].sort((a, b) => {
-    switch (sortBy.value) {
-      case 'date-desc':
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      case 'date-asc':
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      case 'name-asc': {
-        const nameA = `${a.candidateFirstName} ${a.candidateLastName}`.toLowerCase()
-        const nameB = `${b.candidateFirstName} ${b.candidateLastName}`.toLowerCase()
-        return nameA.localeCompare(nameB)
-      }
-      case 'name-desc': {
-        const nameA = `${a.candidateFirstName} ${a.candidateLastName}`.toLowerCase()
-        const nameB = `${b.candidateFirstName} ${b.candidateLastName}`.toLowerCase()
-        return nameB.localeCompare(nameA)
-      }
-      case 'score-desc':
-        return (b.score ?? -1) - (a.score ?? -1)
-      case 'score-asc':
-        return (a.score ?? -1) - (b.score ?? -1)
-      case 'updated-desc':
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      default:
-        return 0
-    }
-  })
-})
+const filteredApplications = computed(() => applications.value)
 
 type StatusCountMap = {
   new: number
@@ -202,57 +170,95 @@ type StatusCountMap = {
 
 const statusCounts = computed(() => {
   const counts: StatusCountMap = { new: 0, screening: 0, interview: 0, offer: 0, hired: 0, rejected: 0 }
-  for (const application of applications.value) {
-    if (application.status in counts) {
-      counts[application.status as PipelineStatus] += 1
+  const apiCounts = appData.value?.statusCounts
+  if (apiCounts) {
+    for (const status of PIPELINE_STATUSES) {
+      counts[status] = apiCounts[status] ?? 0
     }
   }
   return counts
 })
 
-const currentIndex = ref(0)
+const selectedApplicationId = ref<string | null>(null)
+// One-shot instruction for the next list arrival: paging backwards should land on
+// the last candidate of the previous page instead of the default first.
+const selectLastOnNextLoad = ref(false)
+
+// Derived, not assigned from a watcher: the applications fetch resolves after
+// setup() on the server and watchers never re-run there, so a watcher-set
+// selection stays null in the server HTML while the client picks a candidate
+// during hydration. Vue does not patch mismatched classes on hydration, which
+// leaves the sidebar with nothing highlighted.
+const currentSummary = computed(() => {
+  const apps = filteredApplications.value
+  if (apps.length === 0) return null
+  return apps.find(app => app.id === selectedApplicationId.value) ?? apps[0]!
+})
+
+const currentIndex = computed({
+  get: () => filteredApplications.value.findIndex(app => app.id === currentSummary.value?.id),
+  set: (index: number) => {
+    selectedApplicationId.value = filteredApplications.value[index]?.id ?? null
+  },
+})
 
 // Mobile: toggle between candidate list and detail view
 const showMobileDetail = ref(false)
 
-watch(focusedApplications, () => {
-  if (focusedApplications.value.length === 0) {
-    currentIndex.value = 0
-    return
+watch(filteredApplications, (apps) => {
+  if (selectLastOnNextLoad.value && apps.length > 0) {
+    selectedApplicationId.value = apps[apps.length - 1]!.id
   }
-  if (currentIndex.value >= focusedApplications.value.length) {
-    currentIndex.value = focusedApplications.value.length - 1
-  }
-}, { immediate: true })
-
-watch(focusStatus, () => {
-  currentIndex.value = 0
-  searchTerm.value = ''
-  closePanels()
+  selectLastOnNextLoad.value = false
 })
 
-// Auto-scroll mobile bottom bar to keep selected candidate visible
+watch(focusStatus, () => {
+  searchTerm.value = ''
+  debouncedSearchTerm.value = ''
+  propertyFilters.value = []
+  closePanels()
+  page.value = 1
+  selectedApplicationId.value = null
+})
+
+watch([debouncedSearchTerm, sortBy, scoreFilter, interviewFilter, propertyFilters], () => {
+  page.value = 1
+  selectedApplicationId.value = null
+}, { deep: true })
+
+watch(totalPages, (next) => {
+  if (page.value > next) page.value = next
+})
+
+// Auto-scroll mobile bottom bar and sidebar list to keep selected candidate visible
 watch(currentIndex, () => {
   nextTick(() => {
-    const container = mobileBottomBar.value
-    if (!container) return
-    const selected = container.querySelector(`[data-candidate-idx="${currentIndex.value}"]`) as HTMLElement | null
-    selected?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    const bottomBar = mobileBottomBar.value
+    if (bottomBar) {
+      const selected = bottomBar.querySelector(`[data-candidate-idx="${currentIndex.value}"]`) as HTMLElement | null
+      selected?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    }
+    const list = sidebarList.value
+    if (list) {
+      const selected = list.querySelector(`[data-candidate-idx="${currentIndex.value}"]`) as HTMLElement | null
+      selected?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
   })
 })
 
-const currentSummary = computed(() => filteredApplications.value[currentIndex.value] ?? null)
-
 // Detail tab for center panel
-type DetailTab = 'overview' | 'interviews' | 'documents' | 'responses' | 'ai-analysis' | 'timeline'
+type DetailTab = 'overview' | 'inbox' | 'cover-letter' | 'interviews' | 'documents' | 'responses' | 'ai-analysis' | 'timeline' | 'properties' | 'notes'
 const detailTab = ref<DetailTab>('overview')
 
 // Overview section visibility toggles
 const overviewSections = reactive({
+  coverLetter: true,
   aiAnalysis: true,
   interviews: true,
   documents: true,
   responses: true,
+  properties: true,
+  notes: true,
 })
 const showOverviewDropdown = ref(false)
 const overviewDropdownRef = ref<HTMLElement | null>(null)
@@ -273,11 +279,13 @@ watch(showOverviewDropdown, (val) => {
 
 // Which sections to display based on active tab
 const showSection = computed(() => ({
-  profile: detailTab.value === 'overview',
+  coverLetter: detailTab.value === 'overview' ? overviewSections.coverLetter : detailTab.value === 'cover-letter',
   aiAnalysis: detailTab.value === 'overview' ? overviewSections.aiAnalysis : detailTab.value === 'ai-analysis',
   interviews: detailTab.value === 'overview' ? overviewSections.interviews : detailTab.value === 'interviews',
   documents: detailTab.value === 'overview' ? overviewSections.documents : detailTab.value === 'documents',
   responses: detailTab.value === 'overview' ? overviewSections.responses : detailTab.value === 'responses',
+  properties: detailTab.value === 'overview' ? overviewSections.properties : detailTab.value === 'properties',
+  notes: detailTab.value === 'overview' ? overviewSections.notes : detailTab.value === 'notes',
   timeline: detailTab.value === 'timeline',
 }))
 
@@ -371,12 +379,12 @@ function describeTimelineItem(item: TimelineEntry): string {
 }
 
 // Section refs
-const overviewRef = ref<HTMLElement | null>(null)
 const interviewsRef = ref<HTMLElement | null>(null)
 const documentsRef = ref<HTMLElement | null>(null)
 const responsesRef = ref<HTMLElement | null>(null)
 const detailScrollContainer = ref<HTMLElement | null>(null)
 const mobileBottomBar = ref<HTMLElement | null>(null)
+const sidebarList = ref<HTMLElement | null>(null)
 
 type SwipeDocument = {
   id: string
@@ -402,6 +410,7 @@ type SwipeApplicationDetail = {
   status: string
   score: number | null
   notes: string | null
+  coverLetterText: string | null
   createdAt: string | Date
   updatedAt: string | Date
   candidate: {
@@ -413,6 +422,7 @@ type SwipeApplicationDetail = {
     documents: SwipeDocument[]
   }
   responses: SwipeResponse[]
+  properties: PropertyEntry[]
 }
 
 const currentApplicationId = ref('')
@@ -424,7 +434,6 @@ watch(currentSummary, (summary) => {
 
 const {
   data: currentApplication,
-  status: detailFetchStatus,
   execute: executeDetailFetch,
 } = useFetch<SwipeApplicationDetail | null>(
   () => `/api/applications/${currentApplicationId.value}`,
@@ -436,25 +445,50 @@ const {
   },
 )
 
-// Cache the last successfully loaded detail so switching candidates doesn't flash a loading spinner
-const cachedApplication = ref<SwipeApplicationDetail | null>(null)
+// Keep the last successfully loaded application visible while the next one is
+// being fetched, so switching candidates swaps the detail in place instead of
+// flashing the skeleton (and header fields don't vanish/reappear). Only before
+// the very first load is this null.
+const resolvedCurrentApplication = computed(() => currentApplication.value ?? null)
 
-const resolvedCurrentApplication = computed(() => {
-  if (currentApplication.value && currentApplication.value.id === currentApplicationId.value) {
-    return currentApplication.value
+// True while what we're showing no longer belongs to the selected candidate,
+// i.e. a fetch for the newly selected candidate is still in flight.
+const isDetailStale = computed(() =>
+  !currentApplication.value || currentApplication.value.id !== currentApplicationId.value,
+)
+
+// Fall back to the skeleton only when a fetch is genuinely slow. Fast/cached
+// navigations resolve before this fires, so the content simply swaps in place.
+const showDetailSkeleton = ref(false)
+let detailSkeletonTimer: ReturnType<typeof setTimeout> | null = null
+watch(isDetailStale, (stale) => {
+  if (detailSkeletonTimer) {
+    clearTimeout(detailSkeletonTimer)
+    detailSkeletonTimer = null
   }
-  // Show cached (previous) data while the new detail is loading
-  return cachedApplication.value
+  if (stale) {
+    detailSkeletonTimer = setTimeout(() => {
+      showDetailSkeleton.value = true
+    }, 180)
+  } else {
+    showDetailSkeleton.value = false
+  }
+})
+onBeforeUnmount(() => {
+  if (detailSkeletonTimer) clearTimeout(detailSkeletonTimer)
 })
 
-watch(currentApplication, (val) => {
-  if (val && val.id === currentApplicationId.value) {
-    cachedApplication.value = val
+const hasCoverLetter = computed(() => Boolean(resolvedCurrentApplication.value?.coverLetterText?.trim()))
+
+watch(hasCoverLetter, (hasLetter) => {
+  if (!hasLetter && detailTab.value === 'cover-letter') {
+    detailTab.value = 'overview'
   }
 })
 
 watch(currentApplicationId, () => {
   timelineItems.value = []
+  timelineLoading.value = false
   timelineLoaded.value = false
   timelineError.value = null
 })
@@ -473,12 +507,16 @@ async function loadTimeline() {
     const result = await $fetch<{ items: TimelineEntry[] }>('/api/activity-log/candidate-timeline', {
       query: { candidateId: candId },
     })
+    if (candId !== timelineCandidateId.value) return
     timelineItems.value = result.items
     timelineLoaded.value = true
   } catch (err: any) {
+    if (candId !== timelineCandidateId.value) return
     timelineError.value = err?.data?.statusMessage ?? 'Failed to load timeline'
   } finally {
-    timelineLoading.value = false
+    if (candId === timelineCandidateId.value) {
+      timelineLoading.value = false
+    }
   }
 }
 
@@ -489,6 +527,177 @@ watch([detailTab, timelineCandidateId], () => {
     loadTimeline()
   }
 })
+
+// ─────────────────────────────────────────────
+// Notes (comments on the application)
+// ─────────────────────────────────────────────
+
+interface ApplicationNote {
+  id: string
+  body: string
+  createdAt: string
+  updatedAt: string
+  authorId: string
+  authorName: string | null
+  authorEmail: string | null
+  authorImage: string | null
+}
+
+const { allowed: canCreateNote, role: noteRole } = usePermission({ comment: ['create'] })
+
+// Only used to decide which notes the current user owns, and notes are never
+// rendered during SSR — so resolve the session on the client rather than
+// awaiting it in setup.
+const currentUserId = ref<string | null>(null)
+onMounted(async () => {
+  const { data } = await authClient.getSession()
+  currentUserId.value = data?.user?.id ?? null
+})
+
+// Every role can edit/delete its own note; admins & owners can delete anyone's.
+const canDeleteAnyNote = computed(() => noteRole.value === 'admin' || noteRole.value === 'owner')
+
+const notes = ref<ApplicationNote[]>([])
+const notesLoading = ref(false)
+const notesError = ref<string | null>(null)
+const notesLoaded = ref(false)
+
+const noteDraft = ref('')
+const isSavingNote = ref(false)
+const editingNoteId = ref<string | null>(null)
+const editingNoteBody = ref('')
+const isUpdatingNote = ref(false)
+const deletingNoteId = ref<string | null>(null)
+
+const NOTE_MAX_LENGTH = 10000
+
+function canEditNote(note: ApplicationNote) {
+  return note.authorId === currentUserId.value
+}
+
+function canRemoveNote(note: ApplicationNote) {
+  return canDeleteAnyNote.value || note.authorId === currentUserId.value
+}
+
+function noteAuthorLabel(note: ApplicationNote) {
+  return note.authorName ?? note.authorEmail ?? 'Unknown'
+}
+
+/** `silent` keeps the existing list on screen while refreshing after a mutation. */
+async function loadNotes(silent = false) {
+  const appId = currentApplicationId.value
+  if (!appId) return
+  if (!silent) notesLoading.value = true
+  notesError.value = null
+  try {
+    const result = await $fetch<{ data: ApplicationNote[] }>('/api/comments', {
+      query: { targetType: 'application', targetId: appId, limit: 100 },
+    })
+    if (appId !== currentApplicationId.value) return
+    notes.value = result.data
+    notesLoaded.value = true
+  } catch (err: any) {
+    if (appId !== currentApplicationId.value) return
+    notesError.value = err?.data?.statusMessage ?? 'Failed to load notes'
+  } finally {
+    if (appId === currentApplicationId.value) notesLoading.value = false
+  }
+}
+
+watch(currentApplicationId, () => {
+  notes.value = []
+  notesLoading.value = false
+  notesLoaded.value = false
+  notesError.value = null
+  noteDraft.value = ''
+  editingNoteId.value = null
+  editingNoteBody.value = ''
+})
+
+// Notes live inside the detail pane, which only renders once the (client-side)
+// detail fetch resolves — so a server-side fetch here would be thrown away.
+watch([() => showSection.value.notes, currentApplicationId], () => {
+  if (import.meta.server) return
+  if (showSection.value.notes && !notesLoaded.value && currentApplicationId.value) {
+    loadNotes()
+  }
+}, { immediate: true })
+
+async function addNote() {
+  const body = noteDraft.value.trim()
+  const appId = currentApplicationId.value
+  if (!body || !appId || isSavingNote.value) return
+
+  isSavingNote.value = true
+  try {
+    await $fetch('/api/comments', {
+      method: 'POST',
+      body: { targetType: 'application', targetId: appId, body },
+    })
+    if (appId !== currentApplicationId.value) return
+    noteDraft.value = ''
+    timelineLoaded.value = false
+    await loadNotes(true)
+  } catch (err: any) {
+    if (handlePreviewReadOnlyError(err)) return
+    toast.error('Failed to add note', { message: err?.data?.statusMessage, statusCode: err?.data?.statusCode })
+  } finally {
+    isSavingNote.value = false
+  }
+}
+
+function startEditNote(note: ApplicationNote) {
+  editingNoteId.value = note.id
+  editingNoteBody.value = note.body
+}
+
+function cancelEditNote() {
+  editingNoteId.value = null
+  editingNoteBody.value = ''
+}
+
+async function saveNote() {
+  const noteId = editingNoteId.value
+  const body = editingNoteBody.value.trim()
+  if (!noteId || !body || isUpdatingNote.value) return
+
+  isUpdatingNote.value = true
+  try {
+    const updated = await $fetch<ApplicationNote>(`/api/comments/${noteId}`, {
+      method: 'PATCH',
+      body: { body },
+    })
+    const existing = notes.value.find(n => n.id === noteId)
+    if (existing) {
+      existing.body = updated.body
+      existing.updatedAt = updated.updatedAt
+    }
+    cancelEditNote()
+  } catch (err: any) {
+    if (handlePreviewReadOnlyError(err)) return
+    toast.error('Failed to save note', { message: err?.data?.statusMessage, statusCode: err?.data?.statusCode })
+  } finally {
+    isUpdatingNote.value = false
+  }
+}
+
+async function deleteNote(note: ApplicationNote) {
+  if (deletingNoteId.value) return
+  if (!confirm('Delete this note? This cannot be undone.')) return
+
+  deletingNoteId.value = note.id
+  try {
+    await $fetch(`/api/comments/${note.id}`, { method: 'DELETE' })
+    notes.value = notes.value.filter(n => n.id !== note.id)
+    timelineLoaded.value = false
+    if (editingNoteId.value === note.id) cancelEditNote()
+  } catch (err: any) {
+    if (handlePreviewReadOnlyError(err)) return
+    toast.error('Failed to delete note', { message: err?.data?.statusMessage, statusCode: err?.data?.statusCode })
+  } finally {
+    deletingNoteId.value = null
+  }
+}
 
 useSeoMeta({
   title: computed(() =>
@@ -603,9 +812,11 @@ const isMutating = ref(false)
 
 const showInterviewSidebar = ref(false)
 const interviewTargetApplication = ref<{ id: string; name: string } | null>(null)
+const interviewToReschedule = ref<Interview | null>(null)
 
 function openInterviewScheduler() {
   if (!currentSummary.value) return
+  interviewToReschedule.value = null
   interviewTargetApplication.value = {
     id: currentSummary.value.id,
     name: `${currentSummary.value.candidateFirstName} ${currentSummary.value.candidateLastName}`,
@@ -613,28 +824,39 @@ function openInterviewScheduler() {
   showInterviewSidebar.value = true
 }
 
+function closeInterviewSidebar() {
+  showInterviewSidebar.value = false
+  interviewTargetApplication.value = null
+  interviewToReschedule.value = null
+}
+
 async function handleInterviewScheduled() {
+  const wasRescheduled = !!interviewToReschedule.value
   showInterviewSidebar.value = false
   const scheduledApplicationId = interviewTargetApplication.value?.id ?? currentSummary.value?.id
   interviewTargetApplication.value = null
+  interviewToReschedule.value = null
 
-  track('interview_scheduled')
+  track(wasRescheduled ? 'interview_rescheduled' : 'interview_scheduled')
 
-  // Refresh the interviews list
   await refreshJobInterviews()
 
-  // Transition the application status to 'interview' after scheduling
+  if (wasRescheduled) return
+
+  // Scheduling moves the candidate into the interview stage server-side. Refresh
+  // the pipeline to reflect that, and when the transition applies, follow the
+  // candidate to the interview column so the user sees the scheduled interview.
   if (currentSummary.value && currentSummary.value.status !== 'interview') {
     const allowed = APPLICATION_STATUS_TRANSITIONS[currentSummary.value.status] ?? []
     if (allowed.includes('interview')) {
-      await changeStatus('interview')
+      await refreshApps()
 
-      // Follow the candidate to the interview column so the user sees the scheduled interview
       if (scheduledApplicationId) {
         focusStatus.value = 'interview'
         await nextTick()
-        const idx = filteredApplications.value.findIndex(a => a.id === scheduledApplicationId)
-        if (idx !== -1) currentIndex.value = idx
+        if (filteredApplications.value.some(app => app.id === scheduledApplicationId)) {
+          selectedApplicationId.value = scheduledApplicationId
+        }
       }
     }
   }
@@ -645,19 +867,17 @@ async function handleInterviewScheduled() {
 // ─────────────────────────────────────────────
 
 const { data: jobInterviewsData, refresh: refreshJobInterviews } = useFetch<{ data: Interview[] }>('/api/interviews', {
-  key: `pipeline-job-interviews-${jobId}`,
-  query: { jobId, limit: 100 },
+  key: computed(() => `pipeline-application-interviews-${currentApplicationId.value}`),
+  query: computed(() => ({ applicationId: currentApplicationId.value, limit: 100 })),
   headers: useRequestHeaders(['cookie']),
 })
 
 const jobInterviews = computed(() => jobInterviewsData.value?.data ?? [])
 
-const currentApplicationInterviews = computed(() =>
-  jobInterviews.value.filter(i => i.applicationId === currentApplicationId.value),
-)
+const currentApplicationInterviews = computed(() => jobInterviews.value)
 
 const applicationsWithInterviews = computed(() =>
-  new Set(jobInterviews.value.map(i => i.applicationId)),
+  new Set(applications.value.filter(app => app.hasInterview).map(app => app.id)),
 )
 
 const interviewTypeIcons: Record<string, any> = {
@@ -752,25 +972,13 @@ const interviewEditErrors = ref<Record<string, string>>({})
 const isInterviewSaving = ref(false)
 const isInterviewTransitioning = ref(false)
 
-// Reschedule state
-const rescheduleInterviewId = ref<string | null>(null)
-const rescheduleForm = reactive({
-  date: '',
-  time: '',
-  duration: 60,
-})
-const isRescheduling = ref(false)
-const rescheduleError = ref('')
-
 function toggleInterviewExpand(id: string) {
   if (expandedInterviewId.value === id) {
     expandedInterviewId.value = null
     editingInterviewId.value = null
-    rescheduleInterviewId.value = null
   } else {
     expandedInterviewId.value = id
     editingInterviewId.value = null
-    rescheduleInterviewId.value = null
   }
 }
 
@@ -806,8 +1014,9 @@ async function saveInterviewEdit() {
 
   isInterviewSaving.value = true
   try {
+    const current = jobInterviews.value.find(item => item.id === editingInterviewId.value)
     const filteredInterviewers = interviewEditForm.interviewers.filter(i => i.trim())
-    await $fetch(`/api/interviews/${editingInterviewId.value}`, {
+    const result = await $fetch<InterviewMutationResult>(`/api/interviews/${editingInterviewId.value}`, {
       method: 'PATCH',
       body: {
         title: interviewEditForm.title.trim(),
@@ -817,6 +1026,9 @@ async function saveInterviewEdit() {
         interviewers: filteredInterviewers.length > 0 ? filteredInterviewers : null,
       },
     })
+    if (current && result.notification.intent) {
+      reportCandidateUpdate(result, current.candidateEmail)
+    }
     editingInterviewId.value = null
     await refreshJobInterviews()
   } catch (err: any) {
@@ -827,13 +1039,28 @@ async function saveInterviewEdit() {
   }
 }
 
-async function handleInterviewTransition(interviewId: string, newStatus: InterviewStatus) {
+const pendingInterviewStatus = ref<{
+  interview: Interview
+  status: Exclude<InterviewStatus, 'scheduled'>
+} | null>(null)
+
+function requestInterviewTransition(iv: Interview, newStatus: InterviewStatus) {
+  if (newStatus === 'scheduled') {
+    openReschedule(iv)
+    return
+  }
+  pendingInterviewStatus.value = { interview: iv, status: newStatus }
+}
+
+async function handleInterviewTransition(iv: Interview, newStatus: InterviewStatus) {
   isInterviewTransitioning.value = true
   try {
-    await $fetch(`/api/interviews/${interviewId}`, {
+    const result = await $fetch<InterviewMutationResult>(`/api/interviews/${iv.id}`, {
       method: 'PATCH',
       body: { status: newStatus },
     })
+    pendingInterviewStatus.value = null
+    reportStatus(newStatus, result, iv.candidateEmail)
     await refreshJobInterviews()
   } catch (err: any) {
     if (handlePreviewReadOnlyError(err)) return
@@ -844,50 +1071,21 @@ async function handleInterviewTransition(interviewId: string, newStatus: Intervi
 }
 
 function openReschedule(iv: Interview) {
-  rescheduleInterviewId.value = iv.id
-  const d = new Date(iv.scheduledAt)
-  rescheduleForm.date = d.toISOString().slice(0, 10)
-  rescheduleForm.time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  rescheduleForm.duration = iv.duration
-  rescheduleError.value = ''
-}
-
-function cancelReschedule() {
-  rescheduleInterviewId.value = null
-  rescheduleError.value = ''
-}
-
-async function handleReschedule() {
-  rescheduleError.value = ''
-  if (!rescheduleForm.date || !rescheduleForm.time) {
-    rescheduleError.value = 'Date and time are required'
-    return
+  interviewToReschedule.value = iv
+  interviewTargetApplication.value = {
+    id: iv.applicationId,
+    name: formatPersonName(iv.candidateFirstName, iv.candidateLastName),
   }
-
-  isRescheduling.value = true
-  try {
-    const scheduledAt = new Date(`${rescheduleForm.date}T${rescheduleForm.time}`).toISOString()
-    await $fetch(`/api/interviews/${rescheduleInterviewId.value}`, {
-      method: 'PATCH',
-      body: {
-        scheduledAt,
-        duration: rescheduleForm.duration,
-        status: 'scheduled',
-      },
-    })
-    rescheduleInterviewId.value = null
-    await refreshJobInterviews()
-  } catch (err: any) {
-    if (handlePreviewReadOnlyError(err)) return
-    rescheduleError.value = err?.data?.statusMessage ?? 'Failed to reschedule'
-  } finally {
-    isRescheduling.value = false
-  }
+  showInterviewSidebar.value = true
 }
 
 async function changeStatus(status: string) {
   if (!currentSummary.value || isMutating.value) return
   const applicationId = currentSummary.value.id
+  const selectedIndex = currentIndex.value
+  const nextApplicationId = filteredApplications.value[selectedIndex + 1]?.id
+    ?? filteredApplications.value[selectedIndex - 1]?.id
+    ?? null
 
   isMutating.value = true
 
@@ -904,14 +1102,8 @@ async function changeStatus(status: string) {
 
     await refreshApps()
 
-    // After the moved candidate disappears from the list, the items that came after
-    // it shift up by one index. currentIndex now naturally points to the next
-    // candidate — no change needed. We only clamp if currentIndex is now out of
-    // bounds (i.e. the moved candidate was the last item in the filtered list).
-    const newLen = filteredApplications.value.length
-    if (newLen > 0 && currentIndex.value >= newLen) {
-      currentIndex.value = newLen - 1
-    }
+    // Move to the next visible candidate when the selected application leaves this stage.
+    selectedApplicationId.value = nextApplicationId
   } catch (err: any) {
     if (handlePreviewReadOnlyError(err)) return
     toast.error('Failed to update status', { message: err?.data?.statusMessage, statusCode: err?.data?.statusCode })
@@ -920,20 +1112,34 @@ async function changeStatus(status: string) {
   }
 }
 
-function goToPreviousCard() {
-  if (currentIndex.value === 0) return
-  currentIndex.value -= 1
+async function goToPreviousCard() {
+  if (currentIndex.value > 0) {
+    currentIndex.value -= 1
+    return
+  }
+  if (page.value > 1) {
+    selectLastOnNextLoad.value = true
+    page.value -= 1
+  }
 }
 
-function goToNextCard() {
-  if (currentIndex.value >= filteredApplications.value.length - 1) return
-  currentIndex.value += 1
+async function goToNextCard() {
+  if (currentIndex.value < filteredApplications.value.length - 1) {
+    currentIndex.value += 1
+    return
+  }
+  if (page.value < totalPages.value) {
+    selectLastOnNextLoad.value = false
+    page.value += 1
+  }
 }
 
 // ─────────────────────────────────────────────
 // Fullscreen (focus) mode
 // ─────────────────────────────────────────────
 const isFullscreen = ref(false)
+const isWideDetail = ref(false)
+const detailWidthClass = computed(() => isWideDetail.value ? 'max-w-none' : 'max-w-4xl')
 const pipelineContainer = useTemplateRef<HTMLElement>('pipelineContainer')
 const teleportTarget = computed(() => isFullscreen.value && pipelineContainer.value ? pipelineContainer.value : 'body')
 
@@ -959,6 +1165,119 @@ function onFullscreenChange() {
 
 onMounted(() => document.addEventListener('fullscreenchange', onFullscreenChange))
 onBeforeUnmount(() => document.removeEventListener('fullscreenchange', onFullscreenChange))
+
+// ─────────────────────────────────────────────
+// Detail tab overflow ("priority+" tab bar)
+//
+// Overview is pinned; the remaining tabs are shown inline as long as they fit
+// the detail pane, and collapse into a "more" menu from the right when they
+// don't. Widths come from an invisible ghost row that always renders the full
+// tab set, so measuring never depends on what is currently visible.
+// ─────────────────────────────────────────────
+type OverflowTab = Exclude<DetailTab, 'overview'>
+
+interface DetailTabDef {
+  key: OverflowTab
+  label: string
+  icon?: Component
+  count?: number
+}
+
+const detailTabDefs = computed<DetailTabDef[]>(() => {
+  const defs: DetailTabDef[] = []
+  defs.push({ key: 'inbox', label: 'Inbox', icon: Inbox })
+  if (hasCoverLetter.value) {
+    defs.push({ key: 'cover-letter', label: 'Cover Letter', icon: FileText })
+  }
+  defs.push({ key: 'ai-analysis', label: 'AI Analysis' })
+  defs.push({ key: 'interviews', label: 'Interviews', count: currentApplicationInterviews.value.length })
+  defs.push({ key: 'documents', label: 'Documents', count: resolvedCurrentApplication.value?.candidate.documents?.length ?? 0 })
+  defs.push({ key: 'responses', label: 'Responses', count: resolvedCurrentApplication.value?.responses?.length ?? 0 })
+  defs.push({ key: 'notes', label: 'Notes', icon: StickyNote, count: notes.value.length })
+  defs.push({ key: 'timeline', label: 'Timeline', icon: History })
+  defs.push({ key: 'properties', label: 'Properties', icon: SlidersHorizontal })
+  return defs
+})
+
+const tabBar = useTemplateRef<HTMLElement>('tabBar')
+const tabGhost = useTemplateRef<HTMLElement>('tabGhost')
+const tabOverflowRef = ref<HTMLElement | null>(null)
+const showTabOverflowMenu = ref(false)
+const visibleTabCount = ref(Number.POSITIVE_INFINITY)
+
+const visibleTabs = computed(() => detailTabDefs.value.slice(0, visibleTabCount.value))
+const overflowTabs = computed(() => detailTabDefs.value.slice(visibleTabCount.value))
+const isOverflowTabActive = computed(() => overflowTabs.value.some(tab => tab.key === detailTab.value))
+
+// Matches the `gap-1` between tab buttons.
+const TAB_GAP_PX = 4
+
+function recomputeTabOverflow() {
+  const bar = tabBar.value
+  const ghost = tabGhost.value
+  if (!bar || !ghost) return
+
+  const pinned = ghost.querySelector<HTMLElement>('[data-ghost-pinned]')
+  const more = ghost.querySelector<HTMLElement>('[data-ghost-more]')
+  const items = [...ghost.querySelectorAll<HTMLElement>('[data-ghost-tab]')]
+  if (!pinned || !more || items.length !== detailTabDefs.value.length) return
+
+  const widths = items.map(el => el.offsetWidth + TAB_GAP_PX)
+  const available = bar.clientWidth - pinned.offsetWidth
+  if (widths.reduce((sum, w) => sum + w, 0) <= available) {
+    visibleTabCount.value = items.length
+    return
+  }
+
+  const budget = available - (more.offsetWidth + TAB_GAP_PX)
+  let used = 0
+  let count = 0
+  for (const width of widths) {
+    if (used + width > budget) break
+    used += width
+    count++
+  }
+  visibleTabCount.value = count
+}
+
+function selectOverflowTab(key: OverflowTab) {
+  detailTab.value = key
+  showTabOverflowMenu.value = false
+}
+
+function handleTabOverflowClickOutside(event: MouseEvent) {
+  if (tabOverflowRef.value && !tabOverflowRef.value.contains(event.target as Node)) {
+    showTabOverflowMenu.value = false
+  }
+}
+
+watch(showTabOverflowMenu, (val) => {
+  if (val) {
+    showOverviewDropdown.value = false
+    setTimeout(() => document.addEventListener('click', handleTabOverflowClickOutside), 0)
+  } else {
+    document.removeEventListener('click', handleTabOverflowClickOutside)
+  }
+})
+
+if (import.meta.client) {
+  let tabResizeObserver: ResizeObserver | null = null
+
+  // The ghost row is `w-max`, so observing it also catches label/count changes.
+  watch([tabBar, tabGhost], ([bar, ghost]) => {
+    tabResizeObserver?.disconnect()
+    if (!bar || !ghost || typeof ResizeObserver === 'undefined') return
+    tabResizeObserver ??= new ResizeObserver(() => recomputeTabOverflow())
+    tabResizeObserver.observe(bar)
+    tabResizeObserver.observe(ghost)
+    recomputeTabOverflow()
+  }, { flush: 'post' })
+
+  onBeforeUnmount(() => {
+    tabResizeObserver?.disconnect()
+    document.removeEventListener('click', handleTabOverflowClickOutside)
+  })
+}
 
 function goToPreviousStage() {
   const idx = PIPELINE_STATUSES.indexOf(focusStatus.value)
@@ -1032,41 +1351,6 @@ const jobStatusBadgeClasses: Record<string, string> = {
   open: 'bg-success-50 dark:bg-success-950 text-success-700 dark:text-success-400',
   closed: 'bg-warning-50 dark:bg-warning-950 text-warning-700 dark:text-warning-400',
   archived: 'bg-surface-100 dark:bg-surface-800 text-surface-400',
-}
-
-const isScoringIndividual = ref(false)
-
-async function scoreIndividualCandidate(applicationId: string) {
-  isScoringIndividual.value = true
-  try {
-    await $fetch(`/api/applications/${applicationId}/analyze`, {
-      method: 'POST',
-    })
-    await refreshApps()
-    // Re-fetch the detail so score updates in the detail panel
-    if (currentApplicationId.value === applicationId) {
-      await executeDetailFetch()
-    }
-    track('individual_scoring_completed', { application_id: applicationId })
-    toast.success('Candidate scored', 'AI analysis complete.')
-  } catch (err: any) {
-    const statusMessage = err?.data?.statusMessage ?? ''
-    if (statusMessage.includes('AI provider not configured')) {
-      toast.add({
-        type: 'warning',
-        title: 'AI provider not configured',
-        message: 'Set up your AI provider in Settings first.',
-        link: { label: 'Go to AI Settings', href: '/dashboard/settings/ai' },
-        duration: 8000,
-      })
-    } else if (statusMessage.includes('No scoring criteria')) {
-      toast.warning('No scoring criteria', 'Add scoring criteria to this job first.')
-    } else {
-      toast.error('Scoring failed', { message: statusMessage || 'An unexpected error occurred.', statusCode: err?.data?.statusCode })
-    }
-  } finally {
-    isScoringIndividual.value = false
-  }
 }
 
 onBeforeUnmount(() => {
@@ -1339,6 +1623,16 @@ function closeDocPreview() {
                   </div>
                 </div>
 
+                <!-- Property filters -->
+                <div>
+                  <p class="text-[10px] font-semibold uppercase tracking-wider text-surface-400 dark:text-surface-500 mb-1.5">Properties</p>
+                  <PropertyFilterBar
+                    v-model="propertyFilters"
+                    entity-type="application"
+                    :job-id="jobId"
+                  />
+                </div>
+
                 <!-- Clear filters -->
                 <button
                   v-if="hasActiveFilters"
@@ -1355,18 +1649,36 @@ function closeDocPreview() {
           <!-- Count bar -->
           <div class="shrink-0 px-3.5 pb-2 flex items-center justify-between">
             <span class="text-xs font-medium text-surface-500 dark:text-surface-400">
-              {{ filteredApplications.length }} candidate{{ filteredApplications.length === 1 ? '' : 's' }}
+              Showing {{ pageStart }}-{{ pageEnd }} of {{ focusedApplicationTotal }} candidate{{ focusedApplicationTotal === 1 ? '' : 's' }}
               <span v-if="searchTerm.trim() || hasActiveFilters" class="text-surface-400 dark:text-surface-500">
                 {{ hasActiveFilters ? ' filtered' : ' matching' }}
               </span>
             </span>
-            <span v-if="hasActiveFilters && filteredApplications.length !== focusedApplications.length" class="text-[10px] text-surface-400 dark:text-surface-500">
-              of {{ focusedApplications.length }}
-            </span>
+            <div v-if="totalPages > 1" class="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                class="inline-flex size-6 items-center justify-center rounded-md text-surface-500 hover:bg-surface-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-surface-400 dark:hover:bg-surface-800"
+                :disabled="page <= 1"
+                title="Previous page"
+                @click="page--"
+              >
+                <ChevronLeft class="size-3.5" />
+              </button>
+              <span class="text-[10px] tabular-nums text-surface-400 dark:text-surface-500">{{ page }}/{{ totalPages }}</span>
+              <button
+                type="button"
+                class="inline-flex size-6 items-center justify-center rounded-md text-surface-500 hover:bg-surface-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-surface-400 dark:hover:bg-surface-800"
+                :disabled="page >= totalPages"
+                title="Next page"
+                @click="page++"
+              >
+                <ChevronRight class="size-3.5" />
+              </button>
+            </div>
           </div>
 
           <!-- Scrollable list -->
-          <div class="flex-1 overflow-y-auto scrollbar-thin border-t border-surface-100 dark:border-surface-800/60">
+          <div ref="sidebarList" class="flex-1 overflow-y-auto scrollbar-thin border-t border-surface-100 dark:border-surface-800/60">
             <div v-if="filteredApplications.length === 0" class="p-8 text-center">
               <div class="flex size-12 items-center justify-center rounded-xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
                 <UserRound class="size-5 text-surface-400 dark:text-surface-500" />
@@ -1389,6 +1701,7 @@ function closeDocPreview() {
             <button
               v-for="(app, idx) in filteredApplications"
               :key="app.id"
+              :data-candidate-idx="idx"
               class="pipeline-candidate-card group flex w-full cursor-pointer items-start gap-3 px-3.5 py-3 text-left transition-all duration-150"
               :class="currentIndex === idx
                 ? 'bg-brand-50/70 dark:bg-brand-950/20 border-l-[3px] border-l-brand-500 dark:border-l-brand-400'
@@ -1454,7 +1767,7 @@ function closeDocPreview() {
           <template v-else>
             <!-- Sticky status transitions (stays visible on scroll) -->
             <div v-if="allowedTransitions.length > 0" class="shrink-0 border-b border-surface-200/80 bg-white/95 backdrop-blur-sm px-4 sm:px-6 py-2.5 dark:border-surface-800/60 dark:bg-surface-900/95">
-              <div class="mx-auto max-w-4xl flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <div class="mx-auto flex flex-wrap items-center gap-1.5 sm:gap-2" :class="detailWidthClass">
                 <button
                   v-for="(nextStatus, idx) in allowedTransitions"
                   :key="nextStatus"
@@ -1470,36 +1783,89 @@ function closeDocPreview() {
             </div>
 
             <!-- Scrollable container: header + tabs + content -->
-            <div ref="detailScrollContainer" class="flex-1 overflow-y-auto scrollbar-thin pb-20 md:pb-0">
+            <div
+              ref="detailScrollContainer"
+              class="min-h-0 flex-1 scrollbar-thin pb-20 md:pb-0"
+              :class="detailTab === 'inbox' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'"
+            >
 
             <!-- Candidate header -->
-            <div class="border-b border-surface-200 bg-surface-50 px-4 sm:px-6 py-4 sm:py-6 dark:border-surface-800 dark:bg-surface-900/80">
-              <div class="mx-auto max-w-4xl">
-              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div class="flex items-start gap-4 min-w-0">
+            <div class="shrink-0 border-b border-surface-200 bg-surface-50 px-4 sm:px-6 py-3 sm:py-4 dark:border-surface-800 dark:bg-surface-900/80">
+              <div class="mx-auto" :class="detailWidthClass">
+                <div class="flex items-start gap-4">
                   <div class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-lg font-bold text-white shadow-lg shadow-brand-500/20 dark:from-brand-500 dark:to-brand-700 dark:shadow-brand-500/10">
                     {{ getCandidateInitials(currentSummary.candidateFirstName, currentSummary.candidateLastName) }}
                   </div>
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-2.5">
-                      <h2 class="text-xl font-semibold tracking-tight text-surface-900 dark:text-surface-50 truncate">
-                        {{ formatPersonName(currentSummary.candidateFirstName, currentSummary.candidateLastName) }}
-                      </h2>
-                      <span
-                        class="inline-flex shrink-0 items-center rounded-lg px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset"
-                        :class="{
-                          'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-950/50 dark:text-blue-400 dark:ring-blue-800': currentSummary.status === 'new',
-                          'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-950/50 dark:text-violet-400 dark:ring-violet-800': currentSummary.status === 'screening',
-                          'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:ring-amber-800': currentSummary.status === 'interview',
-                          'bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-950/50 dark:text-teal-400 dark:ring-teal-800': currentSummary.status === 'offer',
-                          'bg-green-50 text-green-700 ring-green-200 dark:bg-green-950/50 dark:text-green-400 dark:ring-green-800': currentSummary.status === 'hired',
-                          'bg-surface-100 text-surface-500 ring-surface-200 dark:bg-surface-800/50 dark:text-surface-400 dark:ring-surface-700': currentSummary.status === 'rejected',
-                        }"
-                      >
-                        {{ currentSummary.status }}
-                      </span>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div class="flex min-w-0 flex-wrap items-center gap-2.5">
+                        <h2 class="truncate text-xl font-semibold tracking-tight text-surface-900 dark:text-surface-50">
+                          {{ formatPersonName(currentSummary.candidateFirstName, currentSummary.candidateLastName) }}
+                        </h2>
+                        <span
+                          class="inline-flex shrink-0 items-center rounded-lg px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset"
+                          :class="{
+                            'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-950/50 dark:text-blue-400 dark:ring-blue-800': currentSummary.status === 'new',
+                            'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-950/50 dark:text-violet-400 dark:ring-violet-800': currentSummary.status === 'screening',
+                            'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:ring-amber-800': currentSummary.status === 'interview',
+                            'bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-950/50 dark:text-teal-400 dark:ring-teal-800': currentSummary.status === 'offer',
+                            'bg-green-50 text-green-700 ring-green-200 dark:bg-green-950/50 dark:text-green-400 dark:ring-green-800': currentSummary.status === 'hired',
+                            'bg-surface-100 text-surface-500 ring-surface-200 dark:bg-surface-800/50 dark:text-surface-400 dark:ring-surface-700': currentSummary.status === 'rejected',
+                          }"
+                        >
+                          {{ currentSummary.status }}
+                        </span>
+                        <span
+                          v-if="currentSummary.score != null"
+                          class="inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset"
+                          :class="{
+                            'bg-success-50 text-success-700 ring-success-200 dark:bg-success-950/60 dark:text-success-400 dark:ring-success-800': currentSummary.score >= 75,
+                            'bg-warning-50 text-warning-700 ring-warning-200 dark:bg-warning-950/60 dark:text-warning-400 dark:ring-warning-800': currentSummary.score >= 40 && currentSummary.score < 75,
+                            'bg-danger-50 text-danger-700 ring-danger-200 dark:bg-danger-950/60 dark:text-danger-400 dark:ring-danger-800': currentSummary.score < 40,
+                          }"
+                        >
+                          {{ currentSummary.score }} pts
+                        </span>
+                      </div>
+                      <div class="flex shrink-0 items-center gap-2">
+                        <div class="mr-2 flex items-center gap-1.5">
+                          <button
+                            :disabled="currentIndex <= 0 && page <= 1"
+                            class="flex cursor-pointer items-center justify-center rounded-lg border border-surface-200 p-1.5 text-surface-500 transition-all duration-150 hover:border-surface-300 hover:bg-white hover:text-surface-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-surface-700 dark:text-surface-400 dark:hover:border-surface-600 dark:hover:bg-surface-800 dark:hover:text-surface-300"
+                            @click="goToPreviousCard"
+                          >
+                            <ArrowLeft class="size-4" />
+                          </button>
+                          <span class="px-0.5 text-xs font-medium tabular-nums text-surface-500 dark:text-surface-400">
+                            {{ pageStart + currentIndex }}/{{ focusedApplicationTotal }}
+                          </span>
+                          <button
+                            :disabled="currentIndex >= filteredApplications.length - 1 && page >= totalPages"
+                            class="flex cursor-pointer items-center justify-center rounded-lg border border-surface-200 p-1.5 text-surface-500 transition-all duration-150 hover:border-surface-300 hover:bg-white hover:text-surface-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-surface-700 dark:text-surface-400 dark:hover:border-surface-600 dark:hover:bg-surface-800 dark:hover:text-surface-300"
+                            @click="goToNextCard"
+                          >
+                            <ArrowRight class="size-4" />
+                          </button>
+                        </div>
+                        <button
+                          class="hidden cursor-pointer items-center justify-center rounded-lg border border-surface-200 p-1.5 text-surface-500 transition-all duration-150 hover:border-surface-300 hover:bg-white hover:text-surface-700 dark:border-surface-700 dark:text-surface-400 dark:hover:border-surface-600 dark:hover:bg-surface-800 dark:hover:text-surface-300 lg:flex"
+                          :aria-pressed="isWideDetail"
+                          :title="isWideDetail ? 'Use centered width' : 'Use full width'"
+                          @click="isWideDetail = !isWideDetail"
+                        >
+                          <FoldHorizontal v-if="isWideDetail" class="size-4" />
+                          <UnfoldHorizontal v-else class="size-4" />
+                        </button>
+                        <NuxtLink
+                          :to="$localePath(`/dashboard/applications/${currentSummary.id}`)"
+                          class="flex items-center justify-center rounded-lg border border-surface-200 p-1.5 text-surface-500 transition-all duration-150 hover:border-surface-300 hover:bg-white hover:text-surface-700 dark:border-surface-700 dark:text-surface-400 dark:hover:border-surface-600 dark:hover:bg-surface-800 dark:hover:text-surface-300"
+                          title="Full application page"
+                        >
+                          <ExternalLink class="size-4" />
+                        </NuxtLink>
+                      </div>
                     </div>
-                    <div class="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-surface-500 dark:text-surface-400">
+                    <div class="mt-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-surface-500 dark:text-surface-400">
                       <a
                         :href="`mailto:${currentSummary.candidateEmail}`"
                         target="_blank"
@@ -1512,31 +1878,6 @@ function closeDocPreview() {
                         <Phone class="size-3.5" />
                         {{ resolvedCurrentApplication.candidate.phone }}
                       </span>
-                    </div>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                      <span
-                        v-if="currentSummary.score != null"
-                        class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset"
-                        :class="{
-                          'bg-success-50 text-success-700 ring-success-200 dark:bg-success-950/60 dark:text-success-400 dark:ring-success-800': currentSummary.score >= 75,
-                          'bg-warning-50 text-warning-700 ring-warning-200 dark:bg-warning-950/60 dark:text-warning-400 dark:ring-warning-800': currentSummary.score >= 40 && currentSummary.score < 75,
-                          'bg-danger-50 text-danger-700 ring-danger-200 dark:bg-danger-950/60 dark:text-danger-400 dark:ring-danger-800': currentSummary.score < 40,
-                        }"
-                      >
-                        {{ currentSummary.score }} pts
-                      </span>
-                      <button
-                        :disabled="isScoringIndividual"
-                        class="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                        :class="currentSummary.score != null
-                          ? 'text-surface-500 hover:text-brand-600 hover:bg-brand-50 dark:text-surface-400 dark:hover:text-brand-400 dark:hover:bg-brand-950/40'
-                          : 'text-brand-600 bg-brand-50 hover:bg-brand-100 dark:text-brand-400 dark:bg-brand-950/40 dark:hover:bg-brand-950/60 ring-1 ring-brand-200 dark:ring-brand-800'"
-                        @click="scoreIndividualCandidate(currentSummary.id)"
-                      >
-                        <Loader2 v-if="isScoringIndividual" class="size-3 animate-spin" />
-                        <Brain v-else class="size-3" />
-                        {{ isScoringIndividual ? 'Scoring…' : (currentSummary.score != null ? 'Re-score' : 'Score Candidate') }}
-                      </button>
                       <TimelineDateLink :date="currentSummary.createdAt" class="inline-flex items-center gap-1 text-[11px] text-surface-400 dark:text-surface-500">
                         <Clock class="size-3" />
                         Applied {{ new Date(currentSummary.createdAt).toLocaleDateString() }}
@@ -1547,47 +1888,18 @@ function closeDocPreview() {
                     </div>
                   </div>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <div class="flex items-center gap-1.5 mr-2">
-                    <button
-                      :disabled="currentIndex === 0"
-                      class="flex cursor-pointer items-center justify-center rounded-lg border border-surface-200 p-1.5 text-surface-500 transition-all duration-150 hover:bg-white hover:border-surface-300 hover:text-surface-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-surface-700 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:border-surface-600 dark:hover:text-surface-300"
-                      @click="goToPreviousCard"
-                    >
-                      <ArrowLeft class="size-4" />
-                    </button>
-                    <span class="text-xs font-medium text-surface-500 dark:text-surface-400 tabular-nums px-0.5">
-                      {{ currentIndex + 1 }}/{{ filteredApplications.length }}
-                    </span>
-                    <button
-                      :disabled="currentIndex >= filteredApplications.length - 1"
-                      class="flex cursor-pointer items-center justify-center rounded-lg border border-surface-200 p-1.5 text-surface-500 transition-all duration-150 hover:bg-white hover:border-surface-300 hover:text-surface-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-surface-700 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:border-surface-600 dark:hover:text-surface-300"
-                      @click="goToNextCard"
-                    >
-                      <ArrowRight class="size-4" />
-                    </button>
-                  </div>
-                  <NuxtLink
-                    :to="$localePath(`/dashboard/applications/${currentSummary.id}`)"
-                    class="flex items-center justify-center rounded-lg border border-surface-200 p-1.5 text-surface-500 transition-all duration-150 hover:bg-white hover:border-surface-300 hover:text-surface-700 dark:border-surface-700 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:border-surface-600 dark:hover:text-surface-300"
-                    title="Full application page"
-                  >
-                    <ExternalLink class="size-4" />
-                  </NuxtLink>
-                </div>
-              </div>
               </div>
             </div>
 
             <!-- Detail tabs -->
-            <div class="border-b border-surface-200/80 bg-white px-4 sm:px-6 dark:border-surface-800/60 dark:bg-surface-900">
-              <div class="mx-auto max-w-4xl flex gap-1 -mb-px scrollbar-none whitespace-nowrap" :class="showOverviewDropdown ? '' : 'overflow-x-auto'">
-                <div ref="overviewDropdownRef" class="relative">
-                  <div class="flex items-center border-b-2 transition-all duration-150" :class="detailTab === 'overview'
-                    ? 'border-brand-600 dark:border-brand-400'
-                    : 'border-transparent'">
+            <div class="shrink-0 border-b border-surface-200/80 bg-white px-4 sm:px-6 py-1 dark:border-surface-800/60 dark:bg-surface-900">
+              <div ref="tabBar" class="relative mx-auto flex items-center gap-0.5 whitespace-nowrap" :class="detailWidthClass">
+                <div ref="overviewDropdownRef" class="relative shrink-0">
+                  <div class="flex items-center rounded-md transition-colors duration-150" :class="detailTab === 'overview'
+                    ? 'bg-brand-50 dark:bg-brand-500/15'
+                    : 'hover:bg-surface-100 dark:hover:bg-surface-800/60'">
                     <button
-                      class="cursor-pointer px-3.5 py-2.5 text-sm font-medium transition-all duration-150"
+                      class="cursor-pointer px-2.5 py-1 text-[13px] font-medium transition-colors duration-150"
                       :class="detailTab === 'overview'
                         ? 'text-brand-700 dark:text-brand-300'
                         : 'text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'"
@@ -1597,7 +1909,7 @@ function closeDocPreview() {
                     </button>
                     <button
                       v-if="detailTab === 'overview'"
-                      class="cursor-pointer -ml-2 p-1 rounded transition-colors duration-150 text-surface-400 hover:text-surface-600 dark:text-surface-500 dark:hover:text-surface-300"
+                      class="cursor-pointer -ml-1.5 pr-1.5 py-1 rounded transition-colors duration-150 text-brand-400 hover:text-brand-600 dark:text-brand-400/70 dark:hover:text-brand-300"
                       @click.stop="showOverviewDropdown = !showOverviewDropdown"
                     >
                       <ChevronDown class="size-3.5 transition-transform duration-150" :class="showOverviewDropdown ? 'rotate-180' : ''" />
@@ -1618,6 +1930,10 @@ function closeDocPreview() {
                       class="absolute left-0 top-full z-50 mt-1 w-44 rounded-xl border border-surface-200 dark:border-surface-700/80 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/5 dark:shadow-black/20 py-1.5 origin-top-left"
                     >
                       <span class="block px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-surface-400 dark:text-surface-500">Sections</span>
+                      <label v-if="hasCoverLetter" class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 cursor-pointer select-none transition-colors">
+                        <input v-model="overviewSections.coverLetter" type="checkbox" class="size-3.5 rounded border-surface-300 text-brand-600 focus:ring-brand-500 dark:border-surface-600 dark:bg-surface-800" />
+                        Cover Letter
+                      </label>
                       <label class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 cursor-pointer select-none transition-colors">
                         <input v-model="overviewSections.aiAnalysis" type="checkbox" class="size-3.5 rounded border-surface-300 text-brand-600 focus:ring-brand-500 dark:border-surface-600 dark:bg-surface-800" />
                         AI Analysis
@@ -1634,116 +1950,157 @@ function closeDocPreview() {
                         <input v-model="overviewSections.responses" type="checkbox" class="size-3.5 rounded border-surface-300 text-brand-600 focus:ring-brand-500 dark:border-surface-600 dark:bg-surface-800" />
                         Responses
                       </label>
+                      <label class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 cursor-pointer select-none transition-colors">
+                        <input v-model="overviewSections.notes" type="checkbox" class="size-3.5 rounded border-surface-300 text-brand-600 focus:ring-brand-500 dark:border-surface-600 dark:bg-surface-800" />
+                        Notes
+                      </label>
+                      <label class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 cursor-pointer select-none transition-colors">
+                        <input v-model="overviewSections.properties" type="checkbox" class="size-3.5 rounded border-surface-300 text-brand-600 focus:ring-brand-500 dark:border-surface-600 dark:bg-surface-800" />
+                        Properties
+                      </label>
                     </div>
                   </Transition>
                 </div>
+                <!-- Tabs that fit the current pane width -->
                 <button
-                  class="cursor-pointer px-3.5 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px"
-                  :class="detailTab === 'ai-analysis'
-                    ? 'border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-300'
-                    : 'border-transparent text-surface-500 hover:text-surface-700 hover:border-surface-300 dark:text-surface-400 dark:hover:text-surface-300 dark:hover:border-surface-600'"
-                  @click="detailTab = 'ai-analysis'"
+                  v-for="tab in visibleTabs"
+                  :key="tab.key"
+                  class="shrink-0 cursor-pointer rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-150 flex items-center gap-1.5"
+                  :class="detailTab === tab.key
+                    ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                    : 'text-surface-500 hover:text-surface-700 hover:bg-surface-100 dark:text-surface-400 dark:hover:text-surface-300 dark:hover:bg-surface-800/60'"
+                  @click="detailTab = tab.key"
                 >
-                  AI Analysis
-                </button>
-                <button
-                  class="cursor-pointer px-3.5 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px"
-                  :class="detailTab === 'interviews'
-                    ? 'border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-300'
-                    : 'border-transparent text-surface-500 hover:text-surface-700 hover:border-surface-300 dark:text-surface-400 dark:hover:text-surface-300 dark:hover:border-surface-600'"
-                  @click="detailTab = 'interviews'"
-                >
-                  Interviews
-                  <span
-                    v-if="currentApplicationInterviews.length > 0"
-                    class="ml-1 text-xs text-surface-400"
-                  >
-                    ({{ currentApplicationInterviews.length }})
+                  <component :is="tab.icon" v-if="tab.icon" class="size-3.5" />
+                  {{ tab.label }}
+                  <span v-if="tab.count" class="text-xs tabular-nums" :class="detailTab === tab.key ? 'text-brand-500/70 dark:text-brand-400/70' : 'text-surface-400'">
+                    {{ tab.count }}
                   </span>
                 </button>
-                <button
-                  class="cursor-pointer px-3.5 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px"
-                  :class="detailTab === 'documents'
-                    ? 'border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-300'
-                    : 'border-transparent text-surface-500 hover:text-surface-700 hover:border-surface-300 dark:text-surface-400 dark:hover:text-surface-300 dark:hover:border-surface-600'"
-                  @click="detailTab = 'documents'"
-                >
-                  Documents
-                  <span
-                    v-if="resolvedCurrentApplication?.candidate.documents?.length"
-                    class="ml-1 text-xs text-surface-400"
+
+                <!-- Tabs that don't fit -->
+                <div v-if="overflowTabs.length > 0" ref="tabOverflowRef" class="relative ml-auto shrink-0">
+                  <button
+                    class="cursor-pointer rounded-md px-2 py-1 text-[13px] font-medium transition-colors duration-150 flex items-center gap-1"
+                    :class="isOverflowTabActive
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                      : 'text-surface-500 hover:text-surface-700 hover:bg-surface-100 dark:text-surface-400 dark:hover:text-surface-300 dark:hover:bg-surface-800/60'"
+                    :aria-expanded="showTabOverflowMenu"
+                    aria-label="More tabs"
+                    @click.stop="showTabOverflowMenu = !showTabOverflowMenu"
                   >
-                    ({{ resolvedCurrentApplication.candidate.documents.length }})
-                  </span>
-                </button>
-                <button
-                  class="cursor-pointer px-3.5 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px"
-                  :class="detailTab === 'responses'
-                    ? 'border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-300'
-                    : 'border-transparent text-surface-500 hover:text-surface-700 hover:border-surface-300 dark:text-surface-400 dark:hover:text-surface-300 dark:hover:border-surface-600'"
-                  @click="detailTab = 'responses'"
-                >
-                  Responses
-                  <span
-                    v-if="resolvedCurrentApplication?.responses?.length"
-                    class="ml-1 text-xs text-surface-400"
+                    <MoreHorizontal class="size-4" />
+                    <span class="text-xs tabular-nums">{{ overflowTabs.length }}</span>
+                  </button>
+
+                  <Transition
+                    enter-active-class="transition duration-150 ease-out"
+                    enter-from-class="opacity-0 scale-95 -translate-y-1"
+                    enter-to-class="opacity-100 scale-100 translate-y-0"
+                    leave-active-class="transition duration-100 ease-in"
+                    leave-from-class="opacity-100 scale-100 translate-y-0"
+                    leave-to-class="opacity-0 scale-95 -translate-y-1"
                   >
-                    ({{ resolvedCurrentApplication.responses.length }})
-                  </span>
-                </button>
-                <button
-                  class="cursor-pointer px-3.5 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px flex items-center gap-1.5"
-                  :class="detailTab === 'timeline'
-                    ? 'border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-300'
-                    : 'border-transparent text-surface-500 hover:text-surface-700 hover:border-surface-300 dark:text-surface-400 dark:hover:text-surface-300 dark:hover:border-surface-600'"
-                  @click="detailTab = 'timeline'"
+                    <div
+                      v-if="showTabOverflowMenu"
+                      class="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-surface-200 dark:border-surface-700/80 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/5 dark:shadow-black/20 py-1.5 origin-top-right"
+                    >
+                      <button
+                        v-for="tab in overflowTabs"
+                        :key="tab.key"
+                        class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm transition-colors cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800/80"
+                        :class="detailTab === tab.key
+                          ? 'text-brand-700 dark:text-brand-300 font-medium'
+                          : 'text-surface-700 dark:text-surface-300'"
+                        @click="selectOverflowTab(tab.key)"
+                      >
+                        <component :is="tab.icon" v-if="tab.icon" class="size-3.5 shrink-0" />
+                        <span v-else class="size-3.5 shrink-0" />
+                        <span class="truncate">{{ tab.label }}</span>
+                        <span v-if="tab.count" class="ml-auto text-xs text-surface-400 tabular-nums">
+                          {{ tab.count }}
+                        </span>
+                      </button>
+                    </div>
+                  </Transition>
+                </div>
+
+                <!--
+                  Invisible measurement row: always renders every tab (plus the
+                  pinned Overview group and the overflow button) so widths stay
+                  known regardless of what is currently collapsed.
+                -->
+                <div
+                  ref="tabGhost"
+                  aria-hidden="true"
+                  class="pointer-events-none invisible absolute left-0 top-0 flex w-max gap-1"
                 >
-                  <History class="size-3.5" />
-                  Timeline
-                </button>
+                  <div data-ghost-pinned class="flex items-center">
+                    <span class="px-2.5 py-1 text-[13px] font-medium">Overview</span>
+                    <span class="-ml-1.5 pr-1.5 py-1"><ChevronDown class="size-3.5" /></span>
+                  </div>
+                  <span
+                    v-for="tab in detailTabDefs"
+                    :key="tab.key"
+                    data-ghost-tab
+                    class="px-2.5 py-1 text-[13px] font-medium flex items-center gap-1.5"
+                  >
+                    <component :is="tab.icon" v-if="tab.icon" class="size-3.5" />
+                    {{ tab.label }}
+                    <span v-if="tab.count" class="text-xs tabular-nums">{{ tab.count }}</span>
+                  </span>
+                  <span data-ghost-more class="px-2 py-1 text-[13px] font-medium flex items-center gap-1">
+                    <MoreHorizontal class="size-4" />
+                    <span class="text-xs tabular-nums">{{ detailTabDefs.length }}</span>
+                  </span>
+                </div>
               </div>
             </div>
 
             <!-- Detail content -->
-            <div class="bg-surface-50/80 dark:bg-surface-950/80 px-4 sm:px-6 py-5 sm:py-8">
-              <div v-if="detailFetchStatus === 'pending' && !resolvedCurrentApplication" class="flex flex-col items-center justify-center py-12">
-                <div class="size-8 rounded-full border-2 border-brand-200 border-t-brand-600 dark:border-brand-800 dark:border-t-brand-400 animate-spin" />
-                <p class="mt-3 text-sm text-surface-400">Loading details…</p>
+            <div
+              class="bg-surface-50/80 px-4 dark:bg-surface-950/80 sm:px-6"
+              :class="detailTab === 'inbox' ? 'flex min-h-0 flex-1 flex-col overflow-hidden py-4 sm:py-5' : 'py-5 sm:py-8'"
+            >
+              <div v-if="!resolvedCurrentApplication || showDetailSkeleton" class="space-y-5 mx-auto animate-pulse" :class="detailWidthClass" aria-label="Loading candidate details">
+                <div class="h-28 rounded-xl border border-surface-200/80 bg-white dark:border-surface-800/60 dark:bg-surface-900" />
+                <div class="h-40 rounded-xl border border-surface-200/80 bg-white dark:border-surface-800/60 dark:bg-surface-900" />
+                <div class="h-32 rounded-xl border border-surface-200/80 bg-white dark:border-surface-800/60 dark:bg-surface-900" />
               </div>
 
               <template v-else>
 
 
 
-              <!-- PROFILE SECTION (overview only) -->
-              <div v-if="showSection.profile" ref="overviewRef" class="space-y-5 max-w-4xl mx-auto">
-                <!-- Notes -->
-                <div class="rounded-xl border border-surface-200/80 bg-white p-5 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
+              <!-- CANDIDATE INBOX -->
+              <div v-if="detailTab === 'inbox'" class="mx-auto h-full min-h-0 min-w-0 w-full" :class="detailWidthClass">
+                <CandidateMessagingPanel
+                  :key="currentSummary.id"
+                  :application-id="currentSummary.id"
+                  :candidate-name="formatPersonName(currentSummary.candidateFirstName, currentSummary.candidateLastName)"
+                  :candidate-email="currentSummary.candidateEmail"
+                  :job-title="jobData?.title ?? ''"
+                />
+              </div>
+
+              <!-- COVER LETTER SECTION -->
+              <div v-if="showSection.coverLetter && hasCoverLetter" class="mx-auto" :class="[detailWidthClass, detailTab === 'overview' ? 'mt-5' : '']">
+                <div class="rounded-xl border border-surface-200/80 bg-white p-4 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
                   <div class="flex items-center gap-2.5 mb-4">
-                    <div class="flex size-7 items-center justify-center rounded-lg bg-warning-50 dark:bg-warning-950/40">
-                      <MessageSquare class="size-3.5 text-warning-600 dark:text-warning-400" />
+                    <div class="flex size-7 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
+                      <FileText class="size-3.5 text-brand-600 dark:text-brand-400" />
                     </div>
-                    <h3 class="text-sm font-semibold text-surface-800 dark:text-surface-200">Notes</h3>
+                    <h3 class="text-sm font-semibold text-surface-800 dark:text-surface-200">Cover letter</h3>
                   </div>
                   <p class="text-sm leading-relaxed text-surface-600 dark:text-surface-300 whitespace-pre-wrap">
-                    {{ currentSummary.notes || 'No notes yet.' }}
+                    {{ resolvedCurrentApplication?.coverLetterText }}
                   </p>
                 </div>
 
-                <!-- Quick links -->
-                <div class="flex items-center gap-4 pt-1">
-                  <NuxtLink
-                    :to="$localePath(`/dashboard/applications/${currentSummary.id}`)"
-                    class="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 font-medium transition-colors group"
-                  >
-                    <ExternalLink class="size-3.5 transition-transform group-hover:translate-x-0.5" />
-                    Full application page
-                  </NuxtLink>
-                </div>
               </div>
 
               <!-- AI SCORE BREAKDOWN -->
-              <div v-if="showSection.aiAnalysis" class="max-w-4xl mx-auto" :class="detailTab === 'overview' ? 'mt-5' : ''">
+              <div v-if="showSection.aiAnalysis" class="mx-auto" :class="[detailWidthClass, detailTab === 'overview' ? 'mt-5' : '']">
                 <ScoreBreakdown
                   v-if="currentSummary"
                   :application-id="currentSummary.id"
@@ -1752,7 +2109,7 @@ function closeDocPreview() {
               </div>
 
               <!-- INTERVIEWS SECTION -->
-              <div v-if="showSection.interviews" ref="interviewsRef" class="space-y-3 max-w-4xl mx-auto" :class="detailTab === 'overview' ? 'mt-10' : ''">
+              <div v-if="showSection.interviews" ref="interviewsRef" class="space-y-3 mx-auto" :class="[detailWidthClass, detailTab === 'overview' ? 'mt-6' : '']">
                 <div class="flex items-center justify-between mb-3">
                   <h2 class="text-sm font-semibold text-surface-800 dark:text-surface-200 flex items-center gap-2">
                     <Calendar class="size-4 text-surface-400 dark:text-surface-500" />
@@ -1778,12 +2135,12 @@ function closeDocPreview() {
                   >
                     <!-- Interview card header (always visible) -->
                     <button
-                      class="flex w-full cursor-pointer items-center justify-between gap-4 px-5 py-4 text-left"
+                      class="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left"
                       @click="toggleInterviewExpand(iv.id)"
                     >
-                      <div class="flex items-center gap-3.5 min-w-0">
-                        <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-950/40">
-                          <component :is="interviewTypeIcons[iv.type] ?? Calendar" class="size-4.5 text-brand-600 dark:text-brand-400" />
+                      <div class="flex items-center gap-3 min-w-0">
+                        <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
+                          <component :is="interviewTypeIcons[iv.type] ?? Calendar" class="size-4 text-brand-600 dark:text-brand-400" />
                         </div>
                         <div class="min-w-0">
                           <p class="text-sm font-medium text-surface-800 dark:text-surface-100 truncate">
@@ -1839,64 +2196,20 @@ function closeDocPreview() {
                             :disabled="isInterviewTransitioning"
                             class="cursor-pointer rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                             :class="interviewTransitionClasses[nextStatus]"
-                            @click.stop="nextStatus === 'scheduled' ? openReschedule(iv) : handleInterviewTransition(iv.id, nextStatus)"
+                            @click.stop="requestInterviewTransition(iv, nextStatus)"
                           >
-                            {{ interviewTransitionLabels[nextStatus] }}
-                          </button>
-                        </div>
-                      </div>
-
-                      <!-- Reschedule form (inline) -->
-                      <div v-if="rescheduleInterviewId === iv.id" class="px-5 py-4 border-t border-surface-100 dark:border-surface-800/60">
-                        <h4 class="text-xs font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-1.5">
-                          <Calendar class="size-3.5" />
-                          Reschedule Interview
-                        </h4>
-                        <div class="grid grid-cols-3 gap-3">
-                          <div>
-                            <label class="block text-[11px] font-medium text-surface-500 dark:text-surface-400 mb-1">Date</label>
-                            <input
-                              v-model="rescheduleForm.date"
-                              type="date"
-                              class="w-full rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 px-2.5 py-1.5 text-sm text-surface-900 dark:text-surface-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                              @click.stop
-                            />
-                          </div>
-                          <div>
-                            <label class="block text-[11px] font-medium text-surface-500 dark:text-surface-400 mb-1">Time</label>
-                            <input
-                              v-model="rescheduleForm.time"
-                              type="time"
-                              class="w-full rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 px-2.5 py-1.5 text-sm text-surface-900 dark:text-surface-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                              @click.stop
-                            />
-                          </div>
-                          <div>
-                            <label class="block text-[11px] font-medium text-surface-500 dark:text-surface-400 mb-1">Duration (min)</label>
-                            <input
-                              v-model.number="rescheduleForm.duration"
-                              type="number"
-                              min="5"
-                              max="480"
-                              class="w-full rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 px-2.5 py-1.5 text-sm text-surface-900 dark:text-surface-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                              @click.stop
-                            />
-                          </div>
-                        </div>
-                        <p v-if="rescheduleError" class="mt-2 text-xs text-danger-600 dark:text-danger-400">{{ rescheduleError }}</p>
-                        <div class="flex items-center justify-end gap-2 mt-3">
-                          <button
-                            class="cursor-pointer rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-1.5 text-xs font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
-                            @click.stop="cancelReschedule"
-                          >
-                            Cancel
+                            {{ nextStatus === 'cancelled' && iv.invitationSentAt
+                              ? 'Cancel & notify'
+                              : interviewTransitionLabels[nextStatus] }}
                           </button>
                           <button
-                            :disabled="isRescheduling"
-                            class="cursor-pointer rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            @click.stop="handleReschedule"
+                            v-if="iv.status === 'scheduled'"
+                            type="button"
+                            class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-brand-300 px-2.5 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-50 dark:border-brand-700 dark:text-brand-300 dark:hover:bg-brand-950/30"
+                            @click.stop="openReschedule(iv)"
                           >
-                            {{ isRescheduling ? 'Saving…' : 'Reschedule' }}
+                            <Calendar class="size-3" />
+                            Reschedule & notify
                           </button>
                         </div>
                       </div>
@@ -2070,6 +2383,10 @@ function closeDocPreview() {
 
                             <p v-if="interviewEditErrors.submit" class="text-xs text-danger-600 dark:text-danger-400">{{ interviewEditErrors.submit }}</p>
 
+                            <p v-if="iv.invitationSentAt && iv.status === 'scheduled'" class="text-xs leading-5 text-surface-500 dark:text-surface-400">
+                              Candidate-facing changes send an update to {{ iv.candidateEmail }}.
+                            </p>
+
                             <div class="flex items-center justify-end gap-2 pt-2">
                               <button
                                 class="cursor-pointer rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-1.5 text-xs font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
@@ -2092,10 +2409,16 @@ function closeDocPreview() {
                   </div>
                 </div>
 
+                <!-- Empty state (compact in overview) -->
+                <div v-else-if="detailTab === 'overview'" class="flex items-center gap-2.5 rounded-lg border border-dashed border-surface-200 px-3.5 py-2.5 dark:border-surface-800/70">
+                  <Calendar class="size-4 shrink-0 text-surface-300 dark:text-surface-600" />
+                  <p class="text-xs text-surface-400 dark:text-surface-500">No interviews scheduled yet.</p>
+                </div>
+
                 <!-- Empty state -->
-                <div v-else class="rounded-xl border border-surface-200/80 bg-white p-10 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
-                  <div class="flex size-14 items-center justify-center rounded-2xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
-                    <Calendar class="size-6 text-surface-400 dark:text-surface-500" />
+                <div v-else class="rounded-xl border border-surface-200/80 bg-white px-6 py-9 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
+                  <div class="flex size-11 items-center justify-center rounded-xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
+                    <Calendar class="size-5 text-surface-400 dark:text-surface-500" />
                   </div>
                   <p class="text-sm font-medium text-surface-600 dark:text-surface-300">No interviews scheduled</p>
                   <p class="mt-1 text-xs text-surface-400 dark:text-surface-500">Schedule an interview to start the process.</p>
@@ -2110,7 +2433,7 @@ function closeDocPreview() {
               </div>
 
               <!-- DOCUMENTS SECTION -->
-              <div v-if="showSection.documents" ref="documentsRef" class="space-y-3 max-w-4xl mx-auto" :class="detailTab === 'overview' ? 'mt-10' : ''">
+              <div v-if="showSection.documents" ref="documentsRef" class="space-y-3 mx-auto" :class="[detailWidthClass, detailTab === 'overview' ? 'mt-6' : '']">
                 <h2 class="text-sm font-semibold text-surface-800 dark:text-surface-200 flex items-center gap-2 mb-3">
                   <Paperclip class="size-4 text-surface-400 dark:text-surface-500" />
                   Documents
@@ -2119,11 +2442,11 @@ function closeDocPreview() {
                   <div
                     v-for="doc in resolvedCurrentApplication.candidate.documents"
                     :key="doc.id"
-                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-surface-200/80 bg-white px-5 py-4 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none transition-colors hover:border-surface-300 dark:hover:border-surface-700"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-surface-200/80 bg-white px-4 py-3 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none transition-colors hover:border-surface-300 dark:hover:border-surface-700"
                   >
-                    <div class="flex items-center gap-3.5 min-w-0">
-                      <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-100 dark:bg-surface-800/60">
-                        <FileText class="size-4.5 text-surface-500 dark:text-surface-400" />
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-100 dark:bg-surface-800/60">
+                        <FileText class="size-4 text-surface-500 dark:text-surface-400" />
                       </div>
                       <div class="min-w-0">
                         <p class="text-sm font-medium text-surface-800 dark:text-surface-100 truncate">
@@ -2152,9 +2475,13 @@ function closeDocPreview() {
                     </div>
                   </div>
                 </div>
-                <div v-else class="rounded-xl border border-surface-200/80 bg-white p-10 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
-                  <div class="flex size-14 items-center justify-center rounded-2xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
-                    <FileText class="size-6 text-surface-400 dark:text-surface-500" />
+                <div v-else-if="detailTab === 'overview'" class="flex items-center gap-2.5 rounded-lg border border-dashed border-surface-200 px-3.5 py-2.5 dark:border-surface-800/70">
+                  <FileText class="size-4 shrink-0 text-surface-300 dark:text-surface-600" />
+                  <p class="text-xs text-surface-400 dark:text-surface-500">No documents uploaded.</p>
+                </div>
+                <div v-else class="rounded-xl border border-surface-200/80 bg-white px-6 py-9 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
+                  <div class="flex size-11 items-center justify-center rounded-xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
+                    <FileText class="size-5 text-surface-400 dark:text-surface-500" />
                   </div>
                   <p class="text-sm font-medium text-surface-600 dark:text-surface-300">No documents uploaded</p>
                   <p class="mt-1 text-xs text-surface-400 dark:text-surface-500">Documents will appear here once uploaded.</p>
@@ -2162,19 +2489,18 @@ function closeDocPreview() {
               </div>
 
               <!-- RESPONSES SECTION -->
-              <div v-if="showSection.responses" ref="responsesRef" class="space-y-3 max-w-4xl mx-auto" :class="detailTab === 'overview' ? 'mt-10' : ''">
+              <div v-if="showSection.responses" ref="responsesRef" class="space-y-3 mx-auto" :class="[detailWidthClass, detailTab === 'overview' ? 'mt-6' : '']">
                 <h2 class="text-sm font-semibold text-surface-800 dark:text-surface-200 flex items-center gap-2 mb-3">
                   <MessageSquare class="size-4 text-surface-400 dark:text-surface-500" />
                   Responses
-                </h2>
-                <template v-if="resolvedCurrentApplication?.responses?.length">
-                  <div class="space-y-3">
+                </h2>                <template v-if="resolvedCurrentApplication?.responses?.length">
+                  <div class="divide-y divide-surface-100 rounded-xl border border-surface-200/80 bg-white shadow-sm shadow-surface-900/[0.03] dark:divide-surface-800/60 dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
                     <div
                       v-for="response in resolvedCurrentApplication.responses"
                       :key="response.id"
-                      class="rounded-xl border border-surface-200/80 bg-white p-5 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none"
+                      class="px-4 py-3"
                     >
-                      <p class="text-xs font-semibold text-surface-400 dark:text-surface-500 uppercase tracking-wider mb-2">
+                      <p class="text-[11px] font-semibold text-surface-400 dark:text-surface-500 uppercase tracking-wider mb-1">
                         {{ response.question?.label ?? 'Unknown question' }}
                       </p>
                       <p class="text-sm text-surface-700 dark:text-surface-200 leading-relaxed">
@@ -2183,17 +2509,204 @@ function closeDocPreview() {
                     </div>
                   </div>
                 </template>
-                <div v-else class="rounded-xl border border-surface-200/80 bg-white p-10 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
-                  <div class="flex size-14 items-center justify-center rounded-2xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
-                    <MessageSquare class="size-6 text-surface-400 dark:text-surface-500" />
+                <div v-else-if="detailTab === 'overview'" class="flex items-center gap-2.5 rounded-lg border border-dashed border-surface-200 px-3.5 py-2.5 dark:border-surface-800/70">
+                  <MessageSquare class="size-4 shrink-0 text-surface-300 dark:text-surface-600" />
+                  <p class="text-xs text-surface-400 dark:text-surface-500">No application form responses.</p>
+                </div>
+                <div v-else class="rounded-xl border border-surface-200/80 bg-white px-6 py-9 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
+                  <div class="flex size-11 items-center justify-center rounded-xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
+                    <MessageSquare class="size-5 text-surface-400 dark:text-surface-500" />
                   </div>
                   <p class="text-sm font-medium text-surface-600 dark:text-surface-300">No responses</p>
                   <p class="mt-1 text-xs text-surface-400 dark:text-surface-500">Application form responses will appear here.</p>
                 </div>
               </div>
 
+              <!-- PROPERTIES SECTION -->
+              <div v-if="showSection.properties && resolvedCurrentApplication" class="mx-auto" :class="[detailWidthClass, detailTab === 'overview' ? 'mt-6' : '']">
+                <div class="rounded-xl border border-surface-200/80 bg-white p-4 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
+                  <div class="flex items-center gap-2.5 mb-4">
+                    <div class="flex size-7 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
+                      <SlidersHorizontal class="size-3.5 text-brand-600 dark:text-brand-400" />
+                    </div>
+                    <h3 class="text-sm font-semibold text-surface-800 dark:text-surface-200">Properties</h3>
+                  </div>
+                  <PropertyBlock
+                    entity-type="application"
+                    :entity-id="resolvedCurrentApplication.id"
+                    :job-id="jobId"
+                    :entries="resolvedCurrentApplication.properties ?? []"
+                    @refresh="executeDetailFetch(); refreshApps()"
+                  />
+                </div>
+              </div>
+
+              <!-- NOTES SECTION -->
+              <div v-if="showSection.notes" class="space-y-3 mx-auto" :class="[detailWidthClass, detailTab === 'overview' ? 'mt-6' : '']">
+                <h2 class="text-sm font-semibold text-surface-800 dark:text-surface-200 flex items-center gap-2 mb-3">
+                  <StickyNote class="size-4 text-surface-400 dark:text-surface-500" />
+                  Notes
+                </h2>
+
+                <!-- Composer -->
+                <div v-if="canCreateNote" class="rounded-xl border border-surface-200/80 bg-white p-4 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none">
+                  <textarea
+                    v-model="noteDraft"
+                    rows="3"
+                    :maxlength="NOTE_MAX_LENGTH"
+                    placeholder="Add a note about this candidate…"
+                    class="w-full resize-y rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm text-surface-800 placeholder:text-surface-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100 dark:placeholder:text-surface-500"
+                    @keydown.enter.meta.prevent="addNote"
+                    @keydown.enter.ctrl.prevent="addNote"
+                  />
+                  <div class="mt-2 flex items-center justify-between gap-3">
+                    <span class="text-[11px] text-surface-400 dark:text-surface-500">
+                      Only your team can see notes. <kbd class="font-mono">⌘</kbd>+<kbd class="font-mono">Enter</kbd> to save.
+                    </span>
+                    <button
+                      type="button"
+                      class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-400"
+                      :disabled="!noteDraft.trim() || isSavingNote"
+                      @click="addNote"
+                    >
+                      <Plus class="size-3.5" />
+                      {{ isSavingNote ? 'Saving…' : 'Add note' }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Loading -->
+                <div v-if="notesLoading" class="text-center py-12 text-surface-400">
+                  <div class="size-6 rounded-full border-2 border-brand-200 border-t-brand-600 dark:border-brand-800 dark:border-t-brand-400 animate-spin mx-auto mb-3" />
+                  <p class="text-sm">Loading notes…</p>
+                </div>
+
+                <!-- Error -->
+                <div
+                  v-else-if="notesError"
+                  class="rounded-xl border border-danger-200 bg-danger-50/60 p-6 text-center dark:border-danger-900/60 dark:bg-danger-950/30"
+                >
+                  <AlertTriangle class="size-6 text-danger-400 mx-auto mb-2" />
+                  <p class="text-sm text-danger-700 dark:text-danger-400">{{ notesError }}</p>
+                  <button
+                    type="button"
+                    class="mt-3 cursor-pointer rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-medium text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:text-danger-400 dark:hover:bg-danger-950/60"
+                    @click="loadNotes()"
+                  >
+                    Try again
+                  </button>
+                </div>
+
+                <!-- Empty (compact in overview) -->
+                <div
+                  v-else-if="notes.length === 0 && detailTab === 'overview'"
+                  class="flex items-center gap-2.5 rounded-lg border border-dashed border-surface-200 px-3.5 py-2.5 dark:border-surface-800/70"
+                >
+                  <StickyNote class="size-4 shrink-0 text-surface-300 dark:text-surface-600" />
+                  <p class="text-xs text-surface-400 dark:text-surface-500">No notes yet.</p>
+                </div>
+
+                <!-- Empty -->
+                <div
+                  v-else-if="notes.length === 0"
+                  class="rounded-xl border border-surface-200/80 bg-white px-6 py-9 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none"
+                >
+                  <div class="flex size-11 items-center justify-center rounded-xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
+                    <StickyNote class="size-5 text-surface-400 dark:text-surface-500" />
+                  </div>
+                  <p class="text-sm font-medium text-surface-600 dark:text-surface-300">No notes yet</p>
+                  <p class="mt-1 text-xs text-surface-400 dark:text-surface-500">Notes you and your team write about this candidate appear here.</p>
+                </div>
+
+                <!-- List -->
+                <div v-else class="space-y-3">
+                  <div
+                    v-for="note in notes"
+                    :key="note.id"
+                    class="rounded-xl border border-surface-200/80 bg-white p-4 shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none"
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <img
+                          v-if="note.authorImage"
+                          :src="note.authorImage"
+                          :alt="noteAuthorLabel(note)"
+                          class="size-7 shrink-0 rounded-full object-cover"
+                        >
+                        <div v-else class="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[11px] font-semibold text-brand-700 dark:bg-brand-950/40 dark:text-brand-400">
+                          {{ noteAuthorLabel(note).charAt(0).toUpperCase() }}
+                        </div>
+                        <div class="min-w-0">
+                          <p class="truncate text-[13px] font-medium text-surface-800 dark:text-surface-100">
+                            {{ noteAuthorLabel(note) }}
+                          </p>
+                          <p class="text-[11px] text-surface-400 dark:text-surface-500">
+                            <TimelineDateLink :date="note.createdAt">{{ timeAgo(note.createdAt) }}</TimelineDateLink>
+                            <span v-if="note.updatedAt !== note.createdAt"> · edited</span>
+                          </p>
+                        </div>
+                      </div>
+                      <div v-if="editingNoteId !== note.id" class="flex shrink-0 items-center gap-1">
+                        <button
+                          v-if="canEditNote(note)"
+                          type="button"
+                          class="cursor-pointer rounded-lg p-1.5 text-surface-400 transition-colors hover:bg-surface-100 hover:text-surface-600 dark:hover:bg-surface-800 dark:hover:text-surface-300"
+                          title="Edit note"
+                          @click="startEditNote(note)"
+                        >
+                          <Pencil class="size-3.5" />
+                        </button>
+                        <button
+                          v-if="canRemoveNote(note)"
+                          type="button"
+                          class="cursor-pointer rounded-lg p-1.5 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-danger-950/40 dark:hover:text-danger-400"
+                          :disabled="deletingNoteId === note.id"
+                          title="Delete note"
+                          @click="deleteNote(note)"
+                        >
+                          <Trash2 class="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <template v-if="editingNoteId === note.id">
+                      <textarea
+                        v-model="editingNoteBody"
+                        rows="3"
+                        :maxlength="NOTE_MAX_LENGTH"
+                        class="mt-3 w-full resize-y rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm text-surface-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100"
+                        @keydown.enter.meta.prevent="saveNote"
+                        @keydown.enter.ctrl.prevent="saveNote"
+                        @keydown.esc="cancelEditNote"
+                      />
+                      <div class="mt-2 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          class="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-surface-500 transition-colors hover:bg-surface-100 dark:text-surface-400 dark:hover:bg-surface-800"
+                          @click="cancelEditNote"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-400"
+                          :disabled="!editingNoteBody.trim() || isUpdatingNote"
+                          @click="saveNote"
+                        >
+                          <Save class="size-3" />
+                          {{ isUpdatingNote ? 'Saving…' : 'Save' }}
+                        </button>
+                      </div>
+                    </template>
+                    <p v-else class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-surface-700 dark:text-surface-300">
+                      {{ note.body }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <!-- TIMELINE SECTION -->
-              <div v-if="showSection.timeline" class="space-y-3 max-w-4xl mx-auto">
+              <div v-if="showSection.timeline" class="space-y-3 mx-auto" :class="detailWidthClass">
                 <h2 class="text-sm font-semibold text-surface-800 dark:text-surface-200 flex items-center gap-2 mb-3">
                   <History class="size-4 text-surface-400 dark:text-surface-500" />
                   Timeline
@@ -2223,30 +2736,32 @@ function closeDocPreview() {
                 <!-- Empty -->
                 <div
                   v-else-if="timelineItems.length === 0"
-                  class="rounded-xl border border-surface-200/80 bg-white p-10 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none"
+                  class="rounded-xl border border-surface-200/80 bg-white px-6 py-9 text-center shadow-sm shadow-surface-900/[0.03] dark:border-surface-800/60 dark:bg-surface-900 dark:shadow-none"
                 >
-                  <div class="flex size-14 items-center justify-center rounded-2xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
-                    <History class="size-6 text-surface-400 dark:text-surface-500" />
+                  <div class="flex size-11 items-center justify-center rounded-xl bg-surface-100 dark:bg-surface-800/60 mx-auto mb-3">
+                    <History class="size-5 text-surface-400 dark:text-surface-500" />
                   </div>
                   <p class="text-sm font-medium text-surface-600 dark:text-surface-300">No activity recorded yet.</p>
                   <p class="mt-1 text-xs text-surface-400 dark:text-surface-500">Activity for this candidate will appear here.</p>
                 </div>
 
                 <!-- Timeline list -->
-                <div v-else class="relative">
-                  <!-- Vertical timeline line -->
-                  <div class="absolute left-3 top-0 bottom-0 w-px bg-surface-200 dark:bg-surface-800" />
-
-                  <div class="space-y-0.5">
-                    <div
-                      v-for="item in timelineItems"
-                      :key="item.id"
-                      class="group relative flex items-start gap-3 py-2 px-1 transition-colors duration-150 hover:bg-surface-50 dark:hover:bg-surface-800/40 rounded-lg"
-                    >
-                      <!-- Action icon -->
-                      <div class="relative z-10 flex items-center justify-center size-6 rounded shrink-0" :class="getTimelineActionStyle(item.action).bg">
+                <div v-else>
+                  <div
+                    v-for="(item, index) in timelineItems"
+                    :key="item.id"
+                    class="group flex items-start gap-3 py-1.5 px-1 transition-colors duration-150 hover:bg-surface-50 dark:hover:bg-surface-800/40 rounded-lg"
+                  >
+                    <!-- Left column: icon + connector -->
+                    <div class="flex flex-col items-center shrink-0">
+                      <div class="flex items-center justify-center size-6 rounded shrink-0" :class="getTimelineActionStyle(item.action).bg">
                         <component :is="getTimelineActionStyle(item.action).icon" class="size-3" :class="getTimelineActionStyle(item.action).color" />
                       </div>
+                      <div
+                        v-if="index < timelineItems.length - 1"
+                        class="w-px flex-1 min-h-[10px] bg-surface-200 dark:bg-surface-800 mt-0.5"
+                      />
+                    </div>
 
                       <!-- Content -->
                       <div class="min-w-0 flex-1">
@@ -2276,7 +2791,6 @@ function closeDocPreview() {
                     </div>
                   </div>
                 </div>
-              </div>
 
               </template>
             </div>
@@ -2342,14 +2856,14 @@ function closeDocPreview() {
         <!-- Position indicator -->
         <div class="flex items-center justify-center pb-1.5">
           <span class="text-[10px] font-medium text-surface-400 dark:text-surface-500 tabular-nums">
-            {{ currentIndex + 1 }} / {{ filteredApplications.length }}
+            {{ pageStart + currentIndex }} / {{ focusedApplicationTotal }}
           </span>
         </div>
       </div>
 
       <!-- Mobile empty state for bottom bar -->
       <div
-        v-else-if="focusedApplications.length === 0"
+        v-else-if="focusedApplicationTotal === 0"
         class="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-surface-200/80 bg-white dark:border-surface-800/60 dark:bg-surface-900 px-4 py-3 text-center"
         :style="{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }"
       >
@@ -2369,9 +2883,21 @@ function closeDocPreview() {
       :application-id="interviewTargetApplication.id"
       :candidate-name="interviewTargetApplication.name"
       :job-title="jobData?.title ?? ''"
+      :interview="interviewToReschedule"
       :teleport-target="teleportTarget"
-      @close="showInterviewSidebar = false"
+      @close="closeInterviewSidebar"
       @scheduled="handleInterviewScheduled"
+    />
+
+    <InterviewStatusActionDialog
+      :open="!!pendingInterviewStatus"
+      :action="pendingInterviewStatus?.status ?? null"
+      :candidate-name="pendingInterviewStatus ? formatPersonName(pendingInterviewStatus.interview.candidateFirstName, pendingInterviewStatus.interview.candidateLastName) : ''"
+      :candidate-email="pendingInterviewStatus?.interview.candidateEmail ?? ''"
+      :invitation-sent-at="pendingInterviewStatus?.interview.invitationSentAt ?? null"
+      :loading="isInterviewTransitioning"
+      @close="pendingInterviewStatus = null"
+      @confirm="pendingInterviewStatus && handleInterviewTransition(pendingInterviewStatus.interview, pendingInterviewStatus.status)"
     />
 
     <!-- Document Preview Modal -->

@@ -68,6 +68,15 @@ printf 'sync-upstream: fetching %s...\n' "$UPSTREAM_REMOTE"
 git fetch --quiet --tags "$UPSTREAM_REMOTE" || die "fetch failed."
 
 REF="$UPSTREAM_REF"
+
+# A TAG is a ref, not a <remote>/<branch> pair, so `UPSTREAM_BRANCH=v1.6.0` composes a
+# "$UPSTREAM_REMOTE/v1.6.0" that cannot exist. Syncing onto a release tag instead of a moving HEAD
+# is the normal reason to override at all, so resolve the bare name rather than dead-ending on it.
+if ! git rev-parse --verify -q "$REF" >/dev/null && git rev-parse --verify -q "$UPSTREAM_BRANCH" >/dev/null; then
+  printf 'sync-upstream: %s is not a ref; using %s, which is.\n' "$REF" "$UPSTREAM_BRANCH"
+  REF="$UPSTREAM_BRANCH"
+fi
+
 git rev-parse --verify -q "$REF" >/dev/null || die "no such ref: $REF"
 
 # Say what is actually about to be merged, resolved to a commit — the ref name alone is what made

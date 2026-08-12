@@ -48,6 +48,16 @@ const dateFrom = computed(() => {
 // Fetch data
 // ─────────────────────────────────────────────
 
+// The source-attribution dashboard is a Team+ entitlement (mirrors the server
+// gate on /api/source-tracking/stats). Tracking links themselves stay on every
+// plan, so only the analytics view below is gated.
+const { hasFeature, status: billingStatus } = usePlanFeature()
+const canUseAnalytics = computed(() => hasFeature('sourceAnalytics'))
+const analyticsLocked = computed(() => billingStatus.value != null && !canUseAnalytics.value)
+// Only fetch once billing is known AND the org is entitled (hasFeature is
+// optimistically true while billing status is still loading).
+const analyticsReady = computed(() => billingStatus.value != null && canUseAnalytics.value)
+
 const {
   channelBreakdown,
   topLinks,
@@ -62,6 +72,7 @@ const {
 } = useSourceTracking({
   jobId: selectedJobId,
   from: dateFrom,
+  enabled: analyticsReady,
 })
 
 const {
@@ -352,8 +363,25 @@ const showTab = ref<'overview' | 'links' | 'table'>(initialTab)
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <!-- ─── Loading skeleton ─── -->
-    <div v-if="statsStatus === 'pending'">
+    <!-- ─── Plan gate (Team+) ─── -->
+    <div v-if="analyticsLocked">
+      <div class="mb-8">
+        <h1 class="text-2xl font-bold tracking-tight text-surface-900 dark:text-surface-50">
+          Source Tracking
+        </h1>
+        <p class="mt-1 text-sm text-surface-500 dark:text-surface-400">
+          See where your applications come from — channels, top links, conversion, and referrers.
+        </p>
+      </div>
+      <FeatureLockCard
+        feature="sourceAnalytics"
+        title="Unlock source attribution"
+        description="Track which channels and links actually produce hires — conversion funnels, top referrers, and attribution across every role."
+      />
+    </div>
+
+    <!-- ─── Loading skeleton (also covers the brief pre-entitlement check) ─── -->
+    <div v-else-if="statsStatus === 'pending' || statsStatus === 'idle'">
       <div class="mb-10">
         <div class="h-8 w-56 bg-surface-200 dark:bg-surface-700 rounded-lg animate-pulse mb-2" />
         <div class="h-4 w-72 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
@@ -392,52 +420,44 @@ const showTab = ref<'overview' | 'links' | 'table'>(initialTab)
 
     <!-- ─── Main content ─── -->
     <template v-else>
-      <!-- ─── Header ─── -->
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-10">
-        <div>
-          <h1 class="text-xl sm:text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">Source Tracking</h1>
-          <p class="text-sm text-surface-400 dark:text-surface-500 mt-1">
-            Track where your applications come from
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <!-- Date range pill -->
-          <div class="inline-flex rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-0.5">
-            <button
-              v-for="range in (['7d', '30d', '90d', 'all'] as const)"
-              :key="range"
-              class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
-              :class="dateRange === range
-                ? 'bg-brand-600 text-white shadow-sm'
-                : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200'"
-              @click="dateRange = range"
-            >
-              {{ range === 'all' ? 'All time' : range.toUpperCase() }}
-            </button>
-          </div>
-
-          <!-- Job filter -->
-          <div class="relative">
-            <select
-              v-model="selectedJobId"
-              class="appearance-none rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 pl-3 pr-8 py-2 text-xs font-medium text-surface-700 dark:text-surface-300 cursor-pointer"
-            >
-              <option :value="undefined">All jobs</option>
-              <option v-for="j in jobs" :key="j.id" :value="j.id">{{ j.title }}</option>
-            </select>
-            <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-surface-400 pointer-events-none" />
-          </div>
-
-          <!-- Create link button -->
+      <!-- ─── Controls ─── -->
+      <div class="flex items-center gap-2 mb-6">
+        <!-- Date range pill -->
+        <div class="inline-flex rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-0.5">
           <button
-            v-if="canManageLinks"
-            class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-brand-700 shadow-sm shadow-brand-600/15 hover:shadow-md hover:shadow-brand-600/20 transition-all"
-            @click="showCreateModal = true"
+            v-for="range in (['7d', '30d', '90d', 'all'] as const)"
+            :key="range"
+            class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            :class="dateRange === range
+              ? 'bg-brand-600 text-white shadow-sm'
+              : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200'"
+            @click="dateRange = range"
           >
-            <Plus class="size-4" />
-            <span class="hidden sm:inline">New Link</span>
+            {{ range === 'all' ? 'All time' : range.toUpperCase() }}
           </button>
         </div>
+
+        <!-- Job filter -->
+        <div class="relative">
+          <select
+            v-model="selectedJobId"
+            class="appearance-none rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 pl-3 pr-8 py-2 text-xs font-medium text-surface-700 dark:text-surface-300 cursor-pointer"
+          >
+            <option :value="undefined">All jobs</option>
+            <option v-for="j in jobs" :key="j.id" :value="j.id">{{ j.title }}</option>
+          </select>
+          <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-surface-400 pointer-events-none" />
+        </div>
+
+        <!-- Create link button -->
+        <button
+          v-if="canManageLinks"
+          class="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-brand-700 shadow-sm shadow-brand-600/15 hover:shadow-md hover:shadow-brand-600/20 transition-all"
+          @click="showCreateModal = true"
+        >
+          <Plus class="size-4" />
+          <span class="hidden sm:inline">New Link</span>
+        </button>
       </div>
 
       <!-- ─── Tab navigation ─── -->
