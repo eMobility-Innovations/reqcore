@@ -29,15 +29,16 @@ export function initLoggerProvider(): void {
       'deployment.environment': process.env.RAILWAY_ENVIRONMENT_NAME || 'development',
     }),
     processors: [
-      new BatchLogRecordProcessor(
-        new OTLPLogExporter({
+      // sdk-logs 0.221 takes the exporter as an option, not a positional arg.
+      new BatchLogRecordProcessor({
+        exporter: new OTLPLogExporter({
           url: `${host}/i/v1/logs`,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }),
-      ),
+      }),
     ],
   })
 
