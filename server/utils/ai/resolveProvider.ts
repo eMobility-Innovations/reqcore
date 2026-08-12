@@ -12,8 +12,14 @@
  */
 import { encrypt } from '../encryption'
 import { resolveOrgPlanId } from '../billing/plan'
-import { loadAiConfig, type AiConfigPurpose } from './loadConfig'
+import { loadAiConfig } from './loadConfig'
 import { OPENROUTER_BASE_URL, type ProviderConfig } from './provider'
+import {
+  getPlatformAiOverride,
+  PLATFORM_AI_CONFIG_ID,
+  platformOverrideEnabled,
+  resolvePlatformAiProviderConfig,
+} from './platformConfig'
 
 export interface ResolvedProvider {
   providerConfig: ProviderConfig
@@ -28,6 +34,25 @@ export async function resolveAnalysisProvider(
   orgId: string,
   opts: { preferId?: string | null } = {},
 ): Promise<ResolvedProvider> {
+  if (opts.preferId === PLATFORM_AI_CONFIG_ID) {
+    const platform = await resolvePlatformAiProviderConfig(orgId)
+    return {
+      ...platform,
+      billingMode: 'platform',
+    }
+  }
+
+  if (!opts.preferId) {
+    const platformOverride = await getPlatformAiOverride(orgId)
+    if (platformOverride?.isEnabled && platformOverride.isDefaultAnalysis) {
+      const platform = await resolvePlatformAiProviderConfig(orgId)
+      return {
+        ...platform,
+        billingMode: 'platform',
+      }
+    }
+  }
+
   // 1 + 3: org's own config (or 422 if none AND no platform fallback below).
   try {
     const config = await loadAiConfig(orgId, { purpose: 'analysis', preferId: opts.preferId })
@@ -52,6 +77,16 @@ export async function resolveAnalysisProvider(
     // 2: no org config — fall back to the platform key if one is configured.
     const platformKey = env.OPENROUTER_API_KEY
     if (!platformKey) throw err
+    const platformOverride = await getPlatformAiOverride(orgId)
+    if (!platformOverrideEnabled(platformOverride)) throw err
+
+    if (platformOverride) {
+      const platform = await resolvePlatformAiProviderConfig(orgId)
+      return {
+        ...platform,
+        billingMode: 'platform',
+      }
+    }
 
     const model = env.OPENROUTER_MODEL
     return {

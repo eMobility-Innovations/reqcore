@@ -27,8 +27,8 @@ const { data: job, status: fetchStatus, error: fetchError } = useFetch(
 )
 
 useSeoMeta({
-  title: computed(() => job.value ? `Apply — ${job.value.title}` : 'Apply — Reqcore'),
-  description: computed(() => job.value?.description?.slice(0, 160) ?? 'Submit your application'),
+  title: computed(() => job.value ? `${t('jobs.apply.metaApplyPrefix')} — ${job.value.title}` : t('jobs.apply.metaTitleFallback')),
+  description: computed(() => job.value?.description?.slice(0, 160) ?? t('jobs.apply.metaDescriptionFallback')),
   robots: 'noindex, nofollow',
 })
 
@@ -81,32 +81,32 @@ function validate(): boolean {
   errors.value = {}
   const maxSize = 10 * 1024 * 1024
 
-  if (!form.value.firstName.trim()) errors.value.firstName = 'First name is required'
-  if (!form.value.lastName.trim()) errors.value.lastName = 'Last name is required'
+  if (!form.value.firstName.trim()) errors.value.firstName = t('jobs.apply.validation.firstNameRequired')
+  if (!form.value.lastName.trim()) errors.value.lastName = t('jobs.apply.validation.lastNameRequired')
   if (!form.value.email.trim()) {
-    errors.value.email = 'Email is required'
+    errors.value.email = t('jobs.apply.validation.emailRequired')
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.value.email)) {
-    errors.value.email = 'Invalid email address'
+    errors.value.email = t('jobs.apply.validation.emailInvalid')
   }
   if (job.value?.phoneRequirement === 'required' && !form.value.phone.trim()) {
-    errors.value.phone = 'Phone number is required'
+    errors.value.phone = t('jobs.apply.validation.phoneRequired')
   }
 
   // Validate required resume
   if (job.value?.requireResume && !resumeFile.value) {
-    errors.value.resume = 'Resume/CV is required'
+    errors.value.resume = t('jobs.apply.validation.resumeRequired')
   }
 
   // Validate required cover letter
   if (job.value?.requireCoverLetter && !coverLetterText.value.trim()) {
-    errors.value.coverLetter = 'Cover letter is required'
+    errors.value.coverLetter = t('jobs.apply.validation.coverLetterRequired')
   } else if (coverLetterText.value.length > 10_000) {
-    errors.value.coverLetter = 'Cover letter must be 10,000 characters or fewer.'
+    errors.value.coverLetter = t('jobs.apply.validation.coverLetterTooLong')
   }
 
   // Validate resume file size
   if (resumeFile.value && resumeFile.value.size > maxSize) {
-    errors.value.resume = 'File too large. Maximum 10 MB.'
+    errors.value.resume = t('jobs.apply.validation.fileTooLarge')
   }
 
   // Validate required custom questions
@@ -116,7 +116,7 @@ function validate(): boolean {
         if (q.type === 'file_upload') {
           // For file uploads, check if a File was selected
           if (!fileUploads.value[q.id]) {
-            errors.value[`q-${q.id}`] = 'This field is required'
+            errors.value[`q-${q.id}`] = t('jobs.apply.validation.fieldRequired')
           }
         } else {
           const val = responses.value[q.id]
@@ -124,7 +124,7 @@ function validate(): boolean {
             (Array.isArray(val) && val.length === 0)
 
           if (isEmpty) {
-            errors.value[`q-${q.id}`] = 'This field is required'
+            errors.value[`q-${q.id}`] = t('jobs.apply.validation.fieldRequired')
           }
         }
       }
@@ -134,7 +134,7 @@ function validate(): boolean {
   // Validate custom file upload sizes
   for (const [questionId, file] of Object.entries(fileUploads.value)) {
     if (file.size > maxSize) {
-      errors.value[`q-${questionId}`] = 'File too large. Maximum 10 MB.'
+      errors.value[`q-${questionId}`] = t('jobs.apply.validation.fileTooLarge')
     }
   }
 
@@ -234,7 +234,7 @@ async function handleSubmit() {
     track('application_submitted', { slug: jobSlug })
     await navigateTo(`/jobs/${jobSlug}/confirmation`)
   } catch (err: any) {
-    const message = err.data?.statusMessage ?? 'Something went wrong. Please try again.'
+    const message = err.data?.statusMessage ?? t('jobs.apply.genericError')
     submitError.value = message
 
     // Surface file-related errors next to the resume field so the user knows what to fix
@@ -266,15 +266,15 @@ async function handleSubmit() {
       <div class="mb-5 flex size-16 items-center justify-center rounded-full bg-surface-100 dark:bg-surface-800">
         <Briefcase class="size-7 text-surface-400" />
       </div>
-      <h1 class="text-xl font-bold text-surface-900 dark:text-surface-100 mb-2">Position Not Found</h1>
+      <h1 class="text-xl font-bold text-surface-900 dark:text-surface-100 mb-2">{{ t('jobs.apply.notFoundTitle') }}</h1>
       <p class="text-sm text-surface-500 mb-6 max-w-xs">
-        This position may have been filled or is no longer accepting applications.
+        {{ t('jobs.apply.notFoundBody') }}
       </p>
       <a
         :href="useRuntimeConfig().public.marketingUrl"
         class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors shadow-sm"
       >
-        Back to Home
+        {{ t('jobs.apply.backHome') }}
       </a>
     </div>
 
@@ -289,7 +289,7 @@ async function handleSubmit() {
         <svg class="size-3.5 transition-transform group-hover:-translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="m15 18-6-6 6-6"/>
         </svg>
-        Back to job details
+        {{ t('jobs.apply.backToDetails') }}
       </NuxtLink>
 
       <PublicJobApplicationHeader :job="job" />

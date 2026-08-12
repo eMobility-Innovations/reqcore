@@ -21,8 +21,8 @@ import { FREE_PLAN_ANALYSIS_LIMIT } from '../../../shared/billing'
 /**
  * Monthly platform-paid AI budget per *paid* org, in USD, keyed by plan.
  * Free orgs are gated by a lifetime run count instead (see `freeRunLimit`).
- * Scale/Agency are BYOK-encouraged, so their numbers are generous backstops,
- * not expected ceilings.
+ * BYOK is available on every plan; these caps are generous backstops for
+ * platform-paid analysis, not expected ceilings.
  *
  * These are conservative starting points — tune them as you learn real
  * cost-per-customer from the analytics. Keep them well under each plan's MRR.

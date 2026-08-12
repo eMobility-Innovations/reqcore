@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
       requireResume: true,
       requireCoverLetter: true,
       autoScoreOnApply: true,
+      analysisContext: true,
       experienceLevel: true,
       createdAt: true,
       updatedAt: true,

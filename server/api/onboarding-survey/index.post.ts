@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const values = {
     userId,
     organizationId: orgId,
-    signupPlan: body.plan ?? null,
+    signupPlan: body.plan ?? 'free',
     signupBilling: body.billing ?? null,
     companySize: body.answers.company_size ?? null,
     userRole: body.answers.user_role ?? null,

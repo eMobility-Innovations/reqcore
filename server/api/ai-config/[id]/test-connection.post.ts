@@ -3,6 +3,10 @@ import { z } from 'zod'
 import { aiConfig } from '../../../database/schema'
 import { generateStructuredOutput, type SupportedProvider } from '../../../utils/ai/provider'
 import { createRateLimiter } from '../../../utils/rateLimit'
+import {
+  PLATFORM_AI_CONFIG_ID,
+  resolvePlatformAiProviderConfig,
+} from '../../../utils/ai/platformConfig'
 
 const limiter = createRateLimiter({
   windowMs: 60_000,
@@ -24,6 +28,32 @@ export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { scoring: ['read'] })
   const orgId = session.session.activeOrganizationId
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse)
+
+  if (id === PLATFORM_AI_CONFIG_ID) {
+    const platform = await resolvePlatformAiProviderConfig(orgId)
+    try {
+      await generateStructuredOutput(
+        {
+          ...platform.providerConfig,
+          maxTokens: 20,
+        },
+        {
+          system: 'Respond with ok: true',
+          prompt: 'Test connection',
+          schema: testSchema,
+          schemaName: 'TestConnection',
+        },
+      )
+      return { success: true }
+    }
+    catch (err: any) {
+      const message = err?.data?.statusMessage ?? err?.message ?? 'Unknown error'
+      throw createError({
+        statusCode: 422,
+        statusMessage: `Connection test failed: ${message}`,
+      })
+    }
+  }
 
   const config = await db.query.aiConfig.findFirst({
     where: and(eq(aiConfig.id, id), eq(aiConfig.organizationId, orgId)),

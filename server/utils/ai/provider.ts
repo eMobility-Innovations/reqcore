@@ -1,7 +1,7 @@
 /**
  * AI Provider Abstraction Layer
  *
- * Supports OpenAI, Anthropic, and custom OpenAI-compatible endpoints.
+ * Supports OpenAI, Anthropic, Google, and custom OpenAI-compatible endpoints.
  * Credentials are decrypted per-request from the organization's AI config.
  * Never logs or stores raw API keys — only encrypted values in the database.
  */
@@ -27,7 +27,7 @@ export interface ProviderConfig {
 
 /** Detailed info about a single model (presentation + suggested defaults). */
 export interface ModelInfo {
-  /** Provider-recognised model id, e.g. `gpt-4.1-mini`. */
+  /** Provider-recognised model id, e.g. `gpt-5.4-mini`. */
   id: string
   /** Human label shown in dropdowns, e.g. `GPT‑4.1 Mini`. */
   label: string
@@ -62,15 +62,12 @@ export const PROVIDER_REGISTRY: Record<string, {
     apiKeyUrl: 'https://platform.openai.com/api-keys',
     signupUrl: 'https://platform.openai.com/signup',
     supportsBaseUrl: false,
-    defaultModel: 'gpt-4.1-mini',
+    defaultModel: 'gpt-5.4-mini',
     models: [
-      { id: 'gpt-4.1', label: 'GPT-4.1', description: 'Flagship model — highest accuracy for complex reasoning.', inputPricePer1m: 2.0, outputPricePer1m: 8.0, badge: 'powerful' },
-      { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', description: 'Best balance of price, speed and quality. Recommended default.', inputPricePer1m: 0.4, outputPricePer1m: 1.6, badge: 'recommended' },
-      { id: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', description: 'Fastest and cheapest GPT-4.1. Great for high-volume scoring.', inputPricePer1m: 0.1, outputPricePer1m: 0.4, badge: 'cheap' },
-      { id: 'gpt-4o', label: 'GPT-4o', description: 'Multimodal flagship from the GPT-4o family.', inputPricePer1m: 2.5, outputPricePer1m: 10.0 },
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'Older small model — keep for cost compatibility.', inputPricePer1m: 0.15, outputPricePer1m: 0.6 },
-      { id: 'o3', label: 'o3', description: 'Reasoning model — slow but excellent at multi-step problems.', inputPricePer1m: 2.0, outputPricePer1m: 8.0 },
-      { id: 'o4-mini', label: 'o4 Mini', description: 'Smaller reasoning model — good price/quality for scoring.', inputPricePer1m: 1.1, outputPricePer1m: 4.4 },
+      { id: 'gpt-5.5', label: 'GPT-5.5', description: 'OpenAI flagship for complex reasoning, coding, and long-context work.', inputPricePer1m: 5.0, outputPricePer1m: 30.0, badge: 'powerful' },
+      { id: 'gpt-5.4', label: 'GPT-5.4', description: 'Strong frontier model for professional workflows at a lower price than GPT-5.5.', inputPricePer1m: 2.5, outputPricePer1m: 15.0 },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', description: 'Best default for most teams: fast, capable, and cost-efficient.', inputPricePer1m: 0.75, outputPricePer1m: 4.5, badge: 'recommended' },
+      { id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', description: 'Lowest-cost GPT-5 option for high-volume chat and scoring.', inputPricePer1m: 0.2, outputPricePer1m: 1.25, badge: 'cheap' },
     ],
   },
   anthropic: {
@@ -80,11 +77,12 @@ export const PROVIDER_REGISTRY: Record<string, {
     apiKeyUrl: 'https://console.anthropic.com/settings/keys',
     signupUrl: 'https://console.anthropic.com/',
     supportsBaseUrl: false,
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-5',
     models: [
-      { id: 'claude-opus-4-20250514', label: 'Claude Opus 4', description: 'Anthropic\'s most capable model. Best for the toughest analyses.', inputPricePer1m: 15.0, outputPricePer1m: 75.0, badge: 'powerful' },
-      { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', description: 'The sweet spot — strong reasoning at a sensible price.', inputPricePer1m: 3.0, outputPricePer1m: 15.0, badge: 'recommended' },
-      { id: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', description: 'Fast and inexpensive. Great for chat and quick scoring.', inputPricePer1m: 0.8, outputPricePer1m: 4.0, badge: 'fast' },
+      { id: 'claude-fable-5', label: 'Claude Fable 5', description: 'Anthropic\'s most capable widely released model for demanding analysis.', inputPricePer1m: 10.0, outputPricePer1m: 50.0, badge: 'powerful' },
+      { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', description: 'Strongest Claude Opus model for complex agentic and enterprise work.', inputPricePer1m: 5.0, outputPricePer1m: 25.0 },
+      { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', description: 'Best balance of speed and intelligence. Recommended default.', inputPricePer1m: 2.0, outputPricePer1m: 10.0, badge: 'recommended' },
+      { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: 'Fastest Claude option with near-frontier quality for chat and scoring.', inputPricePer1m: 1.0, outputPricePer1m: 5.0, badge: 'fast' },
     ],
   },
   google: {
@@ -94,12 +92,27 @@ export const PROVIDER_REGISTRY: Record<string, {
     apiKeyUrl: 'https://aistudio.google.com/apikey',
     signupUrl: 'https://aistudio.google.com/',
     supportsBaseUrl: false,
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-3.5-flash',
     models: [
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Google\'s top model — strong at reasoning and long contexts.', inputPricePer1m: 1.25, outputPricePer1m: 10.0, badge: 'powerful' },
-      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Excellent quality at a very low price. Recommended default.', inputPricePer1m: 0.3, outputPricePer1m: 2.5, badge: 'recommended' },
-      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Previous-gen fast model. Still solid and very cheap.', inputPricePer1m: 0.1, outputPricePer1m: 0.4, badge: 'cheap' },
-      { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', description: 'Cheapest Gemini option for high-volume light tasks.', inputPricePer1m: 0.075, outputPricePer1m: 0.3, badge: 'cheap' },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', description: 'Current stable Gemini model for frontier-quality agentic and coding tasks.', inputPricePer1m: 1.5, outputPricePer1m: 9.0, badge: 'recommended' },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview', description: 'Advanced preview model for complex reasoning and multimodal workflows.', inputPricePer1m: 2.0, outputPricePer1m: 12.0, badge: 'powerful' },
+      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', description: 'Fast preview model with strong multimodal understanding and tool support.', inputPricePer1m: 0.5, outputPricePer1m: 3.0, badge: 'fast' },
+      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', description: 'Cost-efficient Gemini 3 model for high-volume lightweight tasks.', inputPricePer1m: 0.25, outputPricePer1m: 1.5, badge: 'cheap' },
+    ],
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    tagline: 'Unified gateway for OpenAI-compatible models with platform-managed routing.',
+    modelsUrl: 'https://openrouter.ai/models',
+    apiKeyUrl: 'https://openrouter.ai/keys',
+    signupUrl: 'https://openrouter.ai/',
+    supportsBaseUrl: false,
+    defaultModel: 'openai/gpt-5.4-mini',
+    models: [
+      { id: 'openai/gpt-5.4-mini', label: 'GPT-5.4 Mini via OpenRouter', description: 'Cost-efficient default for platform-paid candidate analysis.', inputPricePer1m: 0.75, outputPricePer1m: 4.5, badge: 'recommended' },
+      { id: 'openai/gpt-5.4', label: 'GPT-5.4 via OpenRouter', description: 'Stronger OpenAI model routed through OpenRouter.', inputPricePer1m: 2.5, outputPricePer1m: 15.0 },
+      { id: 'anthropic/claude-sonnet-5', label: 'Claude Sonnet 5 via OpenRouter', description: 'Balanced Claude model routed through OpenRouter.', inputPricePer1m: 2.0, outputPricePer1m: 10.0 },
+      { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash via OpenRouter', description: 'Fast Gemini model routed through OpenRouter.', inputPricePer1m: 1.5, outputPricePer1m: 9.0, badge: 'fast' },
     ],
   },
   openai_compatible: {

@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { test as base, type BrowserContext, type Page } from '@playwright/test'
+import postgres from 'postgres'
 
 /**
  * Shared test fixtures for Reqcore E2E tests.
@@ -31,12 +34,57 @@ type Fixtures = {
   authenticatedPage: Page
 }
 
+export function e2eDatabaseUrl(): string {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL
+
+  const envFile = readFileSync(join(process.cwd(), '.env'), 'utf8')
+  const line = envFile
+    .split(/\r?\n/)
+    .find(entry => entry.trim().startsWith('DATABASE_URL='))
+  const value = line?.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2')
+
+  if (!value) throw new Error('DATABASE_URL is required for authenticated E2E fixtures')
+  return value
+}
+
+async function verifyTestAccountEmail(email: string): Promise<void> {
+  const sql = postgres(e2eDatabaseUrl(), { max: 1 })
+  try {
+    const updated = await sql`
+      update "user"
+      set email_verified = true, updated_at = now()
+      where email = ${email}
+      returning id
+    `
+    if (updated.length !== 1) throw new Error(`Could not verify E2E account ${email}`)
+  }
+  finally {
+    await sql.end()
+  }
+}
+
 export async function declineAnalyticsConsent(context: BrowserContext) {
   await context.addCookies([{
     name: 'reqcore-consent',
     value: 'denied',
     url: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3333',
   }])
+}
+
+export async function getPublishedApplicationLink(page: Page) {
+  await page.waitForFunction(() => {
+    return Array.from(document.querySelectorAll<HTMLInputElement>('input[readonly]'))
+      .some(input => /\/jobs\/[^/]+\/apply(?:$|[?#])/.test(input.value))
+  }, undefined, { timeout: 10_000 })
+
+  const applicationLink = await page.locator('input[readonly]').evaluateAll(inputs => {
+    return inputs
+      .map(input => (input as HTMLInputElement).value)
+      .find(value => /\/jobs\/[^/]+\/apply(?:$|[?#])/.test(value))
+  })
+
+  if (!applicationLink) throw new Error('Published application link input was not found')
+  return applicationLink
 }
 
 export const test = base.extend<Fixtures>({
@@ -68,6 +116,10 @@ export const test = base.extend<Fixtures>({
       ),
       page.getByRole('button', { name: 'Sign up' }).click(),
     ])
+
+    // Outbound critical flows require a verified owner. The test environment
+    // has no mailbox from which to consume Better Auth's verification link.
+    await verifyTestAccountEmail(testAccount.email)
 
     // After sign-up the app navigates to /onboarding/create-org, but the
     // auth middleware may not yet recognise the freshly-set session cookie

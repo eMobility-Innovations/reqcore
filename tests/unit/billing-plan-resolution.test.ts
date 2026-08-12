@@ -142,11 +142,17 @@ describe('assertActiveRoleLimit', () => {
 })
 
 describe('tierHasFeature', () => {
-  it('gates interviews at Solo+ and calendar at Team+', () => {
-    expect(tierHasFeature('free', 'interviews')).toBe(false)
+  it('allows tracked interviews on Free and gates calendar at Team+', () => {
+    expect(tierHasFeature('free', 'interviews')).toBe(true)
     expect(tierHasFeature('solo', 'interviews')).toBe(true)
     expect(tierHasFeature('solo', 'calendar')).toBe(false)
     expect(tierHasFeature('team', 'calendar')).toBe(true)
+  })
+
+  it('allows the branded career page on every plan', () => {
+    for (const tier of ['free', 'solo', 'team', 'grandfathered', 'scale', 'agency'] as const) {
+      expect(tierHasFeature(tier, 'careerPage')).toBe(true)
+    }
   })
 
   it('gates source / timeline / AI analytics dashboards at Team+', () => {
@@ -164,11 +170,10 @@ describe('tierHasFeature', () => {
     }
   })
 
-  it('gates byok at Scale+, except Free gets it too (to go past the free run limit)', () => {
-    expect(tierHasFeature('free', 'byok')).toBe(true)
-    expect(tierHasFeature('solo', 'byok')).toBe(false)
-    expect(tierHasFeature('team', 'byok')).toBe(false)
-    expect(tierHasFeature('scale', 'byok')).toBe(true)
+  it('allows BYOK on every plan', () => {
+    for (const tier of ['free', 'solo', 'team', 'grandfathered', 'scale', 'agency'] as const) {
+      expect(tierHasFeature(tier, 'byok')).toBe(true)
+    }
   })
 
   it('gives grandfathered orgs Team features plus BYOK without Scale features', () => {
@@ -195,17 +200,17 @@ describe('tierHasFeature', () => {
 
 describe('assertTierFeature', () => {
   it('passes silently when the tier is entitled', () => {
-    expect(() => assertTierFeature('scale', 'byok')).not.toThrow()
+    expect(() => assertTierFeature('free', 'byok')).not.toThrow()
   })
 
   it('throws a 402 with a machine-readable code + required tier when not entitled', () => {
     expect(() => assertTierFeature('free', 'sso')).toThrow()
     try {
-      assertTierFeature('team', 'byok')
+      assertTierFeature('free', 'sso')
     } catch (err) {
       expect(err).toMatchObject({
         statusCode: 402,
-        data: { code: 'PLAN_FEATURE_REQUIRED', feature: 'byok', requiredTier: 'scale', tier: 'team' },
+        data: { code: 'PLAN_FEATURE_REQUIRED', feature: 'sso', requiredTier: 'scale', tier: 'free' },
       })
     }
   })
@@ -242,7 +247,7 @@ describe('assertPlanFeature', () => {
 
   it('rejects a free org (no subscription) for a paid feature', async () => {
     stubDb([])
-    await expect(assertPlanFeature('org_1', 'interviews')).rejects.toMatchObject({ statusCode: 402 })
+    await expect(assertPlanFeature('org_1', 'interviews')).resolves.toBe('free')
   })
 
   it('fails open (returns scale) when Stripe is unconfigured in dev/CI', async () => {

@@ -128,7 +128,19 @@ const builderOperations = {
       <!-- Header -->
 
       <!-- Application builder: controls + live candidate preview -->
-      <div class="grid gap-6 mb-6 xl:grid-cols-[minmax(0,3fr)_minmax(24rem,2fr)]">
+      <!--
+        The two-column layout is intentionally driven by the scoped CSS below
+        (a plain media query on `.builder-layout`) rather than a Tailwind
+        arbitrary responsive utility. In production SSR the arbitrary
+        `xl:grid-cols-[…]` utility was not reliably applied on the first paint
+        after a hard refresh — the container rendered as `display:grid` but
+        without its column template, so the form and preview stacked into a
+        single column until a client-side navigation re-applied the styles.
+        Owning the layout in scoped CSS (higher specificity, unlayered, always
+        inlined with this component) makes the side-by-side layout deterministic
+        across dev/prod and SSR/CSR.
+      -->
+      <div class="builder-layout mb-6">
         <div class="rounded-lg border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 min-w-0 overflow-hidden">
           <!-- Application link pinned to top of the form card -->
           <div v-if="job.status === 'open'" class="flex items-center gap-3 px-5 py-3 bg-brand-50 dark:bg-brand-950/50 border-b border-brand-100 dark:border-brand-900">
@@ -159,7 +171,7 @@ const builderOperations = {
             />
           </div>
         </div>
-        <aside class="hidden min-w-0 xl:block xl:sticky xl:top-8 xl:self-start">
+        <aside class="builder-preview min-w-0">
           <ApplicationBuilderPreview
             :application-form="builderModel"
             max-height="calc(100dvh - 10rem)"
@@ -178,3 +190,35 @@ const builderOperations = {
     </template>
   </div>
 </template>
+
+<style scoped>
+/*
+  Deterministic side-by-side layout for the application builder.
+  See the note in the template above: this replaces a Tailwind arbitrary
+  responsive utility that failed to apply on the first SSR paint in production.
+  Scoped styles are unlayered and always inlined with this component, so they
+  win over (and don't depend on) Tailwind's `@layer utilities` ordering.
+  The 80rem breakpoint mirrors Tailwind's `xl`.
+*/
+.builder-layout {
+  display: grid;
+  gap: 1.5rem; /* gap-6 */
+}
+
+.builder-preview {
+  display: none; /* hidden below xl */
+}
+
+@media (min-width: 80rem) {
+  .builder-layout {
+    grid-template-columns: minmax(0, 3fr) minmax(24rem, 2fr);
+  }
+
+  .builder-preview {
+    display: block;
+    position: sticky;
+    top: 2rem; /* top-8 */
+    align-self: flex-start;
+  }
+}
+</style>

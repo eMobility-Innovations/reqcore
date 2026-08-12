@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import {
-  Building2, Users, UserCircle, ChevronLeft, Settings, Plug, Brain, ShieldCheck, Globe, ShieldAlert, CreditCard, Lock,
+  Building2, Users, UserCircle, ChevronLeft, Settings, Plug, Brain, ShieldCheck, Globe, Globe2, ShieldAlert, CreditCard, Lock,
 } from 'lucide-vue-next'
 import type { PlanFeature } from '~~/shared/billing'
 
@@ -40,6 +40,14 @@ const settingsNav: SettingsNavItem[] = [
     to: '/dashboard/settings/localization',
     icon: Globe,
     exact: true,
+  },
+  {
+    label: 'Career Page',
+    description: 'Branded public page',
+    to: '/dashboard/settings/career-page',
+    icon: Globe2,
+    exact: true,
+    feature: 'careerPage',
   },
   {
     label: 'Members',

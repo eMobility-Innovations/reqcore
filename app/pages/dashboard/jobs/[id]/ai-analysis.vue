@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   Brain, Sparkles, SlidersHorizontal, Plus, Trash2, Loader2, Save, RotateCcw,
+  FileText, Mail, ListChecks, NotebookPen,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -122,6 +123,42 @@ async function toggleAutoScore() {
     autoScoreOnApply.value = !autoScoreOnApply.value
   } finally {
     isSavingAutoScore.value = false
+  }
+}
+
+// ─────────────────────────────────────────────
+// Analysis data sources (which context the AI reads)
+// ─────────────────────────────────────────────
+
+const DEFAULT_ANALYSIS_CONTEXT = { coverLetter: true, screeningAnswers: true, recruiterNotes: false }
+
+const analysisContext = ref({ ...DEFAULT_ANALYSIS_CONTEXT })
+const isSavingContext = ref(false)
+
+watch(job, (j) => {
+  if (j) analysisContext.value = { ...DEFAULT_ANALYSIS_CONTEXT, ...((j as any).analysisContext ?? {}) }
+}, { immediate: true })
+
+const contextSources = [
+  { key: 'coverLetter', label: 'Cover letter', description: 'The candidate\'s cover letter text, if provided.', icon: Mail },
+  { key: 'screeningAnswers', label: 'Screening question answers', description: 'Answers to the custom questions on this job\'s application form.', icon: ListChecks },
+  { key: 'recruiterNotes', label: 'Recruiter notes', description: 'Internal notes on the application. Off by default — enable to let the AI weigh your notes.', icon: NotebookPen },
+] as const
+
+async function saveAnalysisContext() {
+  isSavingContext.value = true
+  try {
+    await $fetch(`/api/jobs/${jobId}`, {
+      method: 'PATCH',
+      body: { analysisContext: analysisContext.value },
+    })
+    toast.success('Data sources updated')
+  } catch (err: any) {
+    toast.error('Failed to update data sources', { message: err?.data?.statusMessage })
+    // Re-sync from the last server state so the UI reflects reality.
+    if (job.value) analysisContext.value = { ...DEFAULT_ANALYSIS_CONTEXT, ...((job.value as any).analysisContext ?? {}) }
+  } finally {
+    isSavingContext.value = false
   }
 }
 
@@ -586,6 +623,62 @@ function resetCriteria() {
           >
             Cancel
           </button>
+        </div>
+      </div>
+
+      <!-- Analysis data sources -->
+      <div class="rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-6 mt-6">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-sm font-semibold text-surface-900 dark:text-surface-100">Candidate data & context</h3>
+            <p class="text-xs text-surface-400 dark:text-surface-500 mt-0.5">
+              Choose which information the AI reads when scoring candidates for this job.
+            </p>
+          </div>
+          <Loader2 v-if="isSavingContext" class="size-4 text-surface-400 animate-spin shrink-0 mt-0.5" />
+        </div>
+
+        <div class="space-y-2">
+          <!-- Resume — always included -->
+          <div class="flex items-start gap-3 rounded-lg border border-surface-200 dark:border-surface-800 bg-surface-50/60 dark:bg-surface-800/30 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked
+              disabled
+              class="mt-0.5 size-4 rounded border-surface-300 dark:border-surface-600 text-brand-600"
+            />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 text-sm font-medium text-surface-900 dark:text-surface-100">
+                <FileText class="size-3.5 text-surface-400" />
+                Resume
+                <span class="text-[10px] font-medium text-surface-400 uppercase tracking-wide">Always included</span>
+              </div>
+              <p class="text-xs text-surface-400 dark:text-surface-500 mt-0.5">
+                The candidate's resume is the backbone of every analysis and can't be turned off.
+              </p>
+            </div>
+          </div>
+
+          <!-- Toggleable sources -->
+          <label
+            v-for="src in contextSources"
+            :key="src.key"
+            class="flex items-start gap-3 rounded-lg border border-surface-200 dark:border-surface-800 px-3 py-2.5 cursor-pointer hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
+          >
+            <input
+              v-model="analysisContext[src.key]"
+              type="checkbox"
+              class="mt-0.5 size-4 rounded border-surface-300 dark:border-surface-600 text-brand-600 focus:ring-brand-500"
+              @change="saveAnalysisContext"
+            />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 text-sm font-medium text-surface-900 dark:text-surface-100">
+                <component :is="src.icon" class="size-3.5 text-surface-400" />
+                {{ src.label }}
+              </div>
+              <p class="text-xs text-surface-400 dark:text-surface-500 mt-0.5">{{ src.description }}</p>
+            </div>
+          </label>
         </div>
       </div>
 

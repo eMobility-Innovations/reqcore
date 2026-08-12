@@ -1,0 +1,1 @@
+ALTER TABLE "career_page" ADD COLUMN "banner_position" integer DEFAULT 50 NOT NULL;

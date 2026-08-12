@@ -35,6 +35,7 @@ export function useJob(id: MaybeRefOrGetter<string>) {
     requireResume: boolean
     requireCoverLetter: boolean
     autoScoreOnApply: boolean
+    analysisContext: { coverLetter: boolean, screeningAnswers: boolean, recruiterNotes: boolean }
     experienceLevel: 'junior' | 'mid' | 'senior' | 'lead' | null
   }>) {
     try {

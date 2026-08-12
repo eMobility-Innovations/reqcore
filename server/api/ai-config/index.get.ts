@@ -1,6 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { aiConfig } from '../../database/schema'
-import { resolveOrgPlanId } from '../../utils/billing/plan'
+import {
+  canUsePlatformAi,
+  getPlatformAiOverride,
+  toPlatformAiConfigListRow,
+} from '../../utils/ai/platformConfig'
 
 /**
  * GET /api/ai-config
@@ -38,27 +42,20 @@ export default defineEventHandler(async (event) => {
     inputPricePer1m: rest.inputPricePer1m != null ? Number(rest.inputPricePer1m) : null,
     outputPricePer1m: rest.outputPricePer1m != null ? Number(rest.outputPricePer1m) : null,
     hasApiKey: Boolean(apiKeyEncrypted),
+    source: 'byok',
   }))
 
-  // Platform-level OpenRouter fallback — orgs with no BYOK config still get AI,
-  // except grandfathered orgs whose free access is explicitly BYOK-only.
-  const allowsPlatformFallback = await resolveOrgPlanId(orgId) !== 'grandfathered'
-  if (allowsPlatformFallback && env.OPENROUTER_API_KEY && !mapped.some(c => c.hasApiKey)) {
-    mapped.push({
-      id: '__platform__',
-      name: 'Platform (OpenRouter)',
-      provider: 'openrouter',
-      model: env.OPENROUTER_MODEL,
-      baseUrl: null,
-      maxTokens: 4096,
-      inputPricePer1m: null,
-      outputPricePer1m: null,
-      isDefaultChatbot: false,
-      isDefaultAnalysis: true,
-      hasApiKey: true,
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    })
+  // The platform ("company") OpenRouter engine is always listed so it can be
+  // toggled on or off — it is never removed. Grandfathered orgs are the sole
+  // exception: their free access is explicitly BYOK-only, so they never see it.
+  if (await canUsePlatformAi(orgId)) {
+    const platformOverride = await getPlatformAiOverride(orgId)
+    const anyByokAnalysisDefault = mapped.some(c => c.isDefaultAnalysis)
+    mapped.push(
+      toPlatformAiConfigListRow(platformOverride, {
+        isDefaultAnalysisFallback: !anyByokAnalysisDefault,
+      }),
+    )
   }
 
   return mapped

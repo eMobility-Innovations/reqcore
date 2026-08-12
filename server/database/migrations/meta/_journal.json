@@ -253,6 +253,69 @@
       "when": 1782890973909,
       "tag": "0035_perpetual_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1783431835757,
+      "tag": "0036_cooing_kingpin",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1783448291551,
+      "tag": "0037_damp_hemingway",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1783449517536,
+      "tag": "0038_cute_drax",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1783526400000,
+      "tag": "0039_platform_ai_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1783601900645,
+      "tag": "0040_shallow_molly_hayes",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1783750672462,
+      "tag": "0041_clean_felicia_hardy",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1784122904673,
+      "tag": "0042_faulty_war_machine",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1784213255082,
+      "tag": "0043_goofy_fixer",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1784287195882,
+      "tag": "0044_candidate_message_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -105,10 +105,17 @@ async function handleSignUp() {
 
     track("signup_submitted");
 
+    // Verification runs in the background; clicking its link returns the user
+    // to the same destination signup is about to open.
+    const verificationCallbackURL = pendingInvitation.value
+        ? localePath(`/auth/accept-invitation/${pendingInvitation.value}`)
+        : onboardingCreateOrgPath();
+
     const result = await authClient.signUp.email({
         email: email.value,
         password: password.value,
         name: name.value,
+        callbackURL: verificationCallbackURL,
     });
 
     if (result.error) {
@@ -129,6 +136,12 @@ async function handleSignUp() {
     track("signup_completed");
 
     clearNuxtData();
+
+    if (!result.data?.token) {
+        error.value = "Your account was created, but sign-in could not be completed. Please sign in to continue.";
+        isLoading.value = false;
+        return;
+    }
 
     // If the user was accepting an invitation, redirect back to accept it
     if (pendingInvitation.value) {

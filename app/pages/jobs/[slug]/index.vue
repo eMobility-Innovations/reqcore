@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MapPin, Briefcase, Building2, ArrowLeft, ExternalLink, Calendar } from 'lucide-vue-next'
+import { MapPin, Briefcase, Building2, ArrowLeft, ExternalLink, Calendar, ChevronRight } from 'lucide-vue-next'
 
 definePageMeta({
   layout: 'public',
@@ -7,7 +7,25 @@ definePageMeta({
 
 const route = useRoute()
 const jobSlug = route.params.slug as string
+const requestURL = useRequestURL()
 const { track } = useTrack()
+const { t, locale, defaultLocale } = useI18n()
+const organizationLogoFailed = ref(false)
+
+// Canonical + JobPosting URL are built from the real request origin rather than
+// the i18n `baseUrl` (which can point at the marketing host if the env var is
+// unset). The canonical self-references the current path (a self-referential
+// canonical is valid on the noindex localized variants); `jobUrl` is the
+// unprefixed default-locale URL — the single page Google for Jobs dedupes to.
+const canonicalUrl = computed(() => `${requestURL.origin}${route.path}`)
+const jobUrl = computed(() => `${requestURL.origin}/jobs/${jobSlug}`)
+
+// Localized (`/es/jobs/x`, …) URLs are non-canonical duplicates of the
+// unprefixed default-locale page: the job content is single-language and only
+// the UI chrome is translated. The nuxt.config routeRules already serve them
+// `X-Robots-Tag: noindex` — mirror that in the page-level robots meta so the
+// two signals agree instead of the meta asserting `index` against the header.
+const isLocalizedVariant = computed(() => locale.value !== defaultLocale)
 
 /** Forward source-tracking query params (?ref=, utm_*) to the apply page */
 const applyQuery = computed(() => {
@@ -60,32 +78,46 @@ const _siteUrl = _rc.public.siteUrl
 const ogImageUrl = _brand === 'escooter-clinic'
   ? `${_siteUrl}/brand/escooter-clinic-og.png`
   : `${_siteUrl}/brand/remote-crew-og.png`
-const _detailSuffix = _brand === 'escooter-clinic' ? 'Escooter Clinic' : 'Hiring Now'
-const _detailFallback = _brand === 'escooter-clinic' ? 'Job Details — Escooter Clinic' : 'Job Details — Reqcore'
+// v1.6.0 moved the unbranded strings into i18n. The branded board keeps its own
+// copy; the unbranded one is upstream's board and takes upstream's translations.
+const _detailSuffix = _brand === 'escooter-clinic' ? 'Escooter Clinic' : t('jobs.detail.hiringNow')
+const _detailFallback = _brand === 'escooter-clinic' ? 'Job Details — Escooter Clinic' : t('jobs.detail.metaTitleFallback')
 
 useSeoMeta({
   title: computed(() => job.value ? `${job.value.title} — ${_detailSuffix}` : _detailFallback),
   description: computed(() => {
-    if (!job.value) return 'View job details and apply'
-    const loc = job.value.location ? ` in ${job.value.location}` : ''
-    const org = job.value.organizationName ? ` at ${job.value.organizationName}` : ''
-    return `Apply for ${job.value.title}${org}${loc}. ${jobDescriptionPlain.value.slice(0, 120)}`.trim()
+    if (!job.value) return t('jobs.detail.metaDescriptionFallback')
+    const loc = job.value.location ? ` ${t('jobs.detail.metaIn')} ${job.value.location}` : ''
+    const org = job.value.organizationName ? ` ${t('jobs.detail.metaAt')} ${job.value.organizationName}` : ''
+    return `${t('jobs.detail.metaApplyFor')} ${job.value.title}${org}${loc}. ${jobDescriptionPlain.value.slice(0, 120)}`.trim()
   }),
-  ogTitle: computed(() => job.value ? `${job.value.title} — ${_detailSuffix}` : 'Job Details'),
+  ogTitle: computed(() => job.value ? `${job.value.title} — ${_detailSuffix}` : _detailFallback),
   ogDescription: computed(() => {
-    if (!job.value) return 'View job details and apply'
-    const org = job.value.organizationName ? ` at ${job.value.organizationName}` : ''
-    return `Apply for ${job.value.title}${org}. ${job.value.location ?? 'Remote'}.`
+    if (!job.value) return t('jobs.detail.metaDescriptionFallback')
+    const org = job.value.organizationName ? ` ${t('jobs.detail.metaAt')} ${job.value.organizationName}` : ''
+    return `${t('jobs.detail.metaApplyFor')} ${job.value.title}${org}. ${job.value.location ?? t('career.remote.remote')}.`
   }),
   ogType: 'website',
+  // ogUrl is upstream's addition; the OG image stays brand-aware and absolute —
+  // a relative one 404s when this app is served under a different apex
+  // (remotecrew.co.uk/jobs), which is the whole reason siteUrl is baked in.
+  ogUrl: () => canonicalUrl.value,
   ogImage: ogImageUrl,
   twitterCard: 'summary_large_image',
   twitterImage: ogImageUrl,
-  twitterTitle: computed(() => job.value?.title ?? 'Job Details'),
+  twitterTitle: computed(() => job.value?.title ?? _detailFallback),
   twitterDescription: computed(() => {
-    if (!job.value) return 'View job details and apply'
-    return `Apply for ${job.value.title}. ${job.value.location ?? 'Remote'}.`
+    if (!job.value) return t('jobs.detail.metaDescriptionFallback')
+    return `${t('jobs.detail.metaApplyFor')} ${job.value.title}. ${job.value.location ?? t('career.remote.remote')}.`
   }),
+  // Noindex when either (a) the job is closed/expired/missing — it 404s at the
+  // API but renders a "not found" body with a 200 status, so opt it out of
+  // indexing to avoid a soft 404 and drop the expired posting from Google for
+  // Jobs — or (b) this is a localized variant (see `isLocalizedVariant`).
+  robots: () =>
+    fetchError.value || isLocalizedVariant.value
+      ? 'noindex, nofollow'
+      : 'index, follow',
 })
 
 // ─────────────────────────────────────────────
@@ -103,12 +135,13 @@ function mapEmploymentType(type: string): string {
   return map[type] || 'OTHER'
 }
 
-// Build the JobPosting JSON-LD reactively. A computed (rather than a useHead
-// buried inside watchEffect) is required so the structured data is serialized
-// into the SSR <head> — which is what Google for Jobs crawls. A useHead() call
-// made later from inside a watcher does not reliably reach the server-rendered
-// head.
-const jobPostingLd = computed<Record<string, unknown> | null>(() => {
+// Build the JobPosting JSON-LD reactively. Exposed as a computed and injected
+// via a top-level `useHead` (below) rather than a `watchEffect` + nested
+// `useHead`: on the server the watch runs once during setup before the async
+// `useFetch` resolves and never re-runs, so the script was missing from the
+// SSR HTML that Google for Jobs reads. A computed re-evaluates once `job`
+// resolves and is serialized into the rendered head.
+const jobPostingJsonLd = computed(() => {
   if (!job.value) return null
 
   const j = job.value
@@ -119,6 +152,9 @@ const jobPostingLd = computed<Record<string, unknown> | null>(() => {
     'datePosted': j.createdAt,
     'employmentType': mapEmploymentType(j.type),
     'directApply': true,
+    // Canonical, unprefixed job URL so Google for Jobs treats the locale
+    // variants as one posting instead of duplicates.
+    'url': jobUrl.value,
   }
 
   // Hiring organization
@@ -176,36 +212,41 @@ const jobPostingLd = computed<Record<string, unknown> | null>(() => {
     }
   }
 
-  return {
+  return JSON.stringify({
     '@context': 'https://schema.org',
     ...posting,
-  }
+  })
 })
 
-// Nonce for the strict, nonce-based CSP (server/middleware/csp.ts). Without it
-// the inline JSON-LD <script> is dropped under script-src 'nonce-…'.
+// Nonce for the strict, nonce-based CSP (server/middleware/csp.ts). Upstream's
+// version of this useHead has no nonce because upstream does not run that CSP;
+// here, without it, the inline JSON-LD <script> is dropped under
+// script-src 'nonce-…' and Google for Jobs sees no structured data at all.
 const _ldNonce = import.meta.server ? (useRequestEvent()?.context?.nonce ?? '') : ''
 
-// Inject the JSON-LD via a top-level reactive useHead so it is serialized into
-// the SSR <head> (what Google for Jobs crawls) and updates once the job loads.
-useHead(() => ({
-  script: jobPostingLd.value
-    ? [{
-        type: 'application/ld+json',
-        innerHTML: JSON.stringify(jobPostingLd.value),
-        ...(_ldNonce ? { nonce: _ldNonce } : {}),
-      }]
-    : [],
+// Canonical + JSON-LD, injected top-level so both are server-rendered. Both this
+// fork and upstream independently replaced a watchEffect-nested useHead here: on
+// the server that watch ran once during setup, before the async useFetch
+// resolved, and never re-ran — so the script was missing from the SSR HTML that
+// Google for Jobs reads. Upstream's shape is kept; the nonce is ours.
+useHead({
+  link: () => [{ rel: 'canonical', href: canonicalUrl.value }],
+  script: () =>
+    jobPostingJsonLd.value
+      ? [{
+          type: 'application/ld+json',
+          innerHTML: jobPostingJsonLd.value,
+          ...(_ldNonce ? { nonce: _ldNonce } : {}),
+        }]
+      : [],
+})
+
+const typeLabels = computed<Record<string, string>>(() => ({
+  full_time: t('career.type.full_time'),
+  part_time: t('career.type.part_time'),
+  contract: t('career.type.contract'),
+  internship: t('career.type.internship'),
 }))
-
-const typeLabels: Record<string, string> = {
-  full_time: 'Full-time',
-  part_time: 'Part-time',
-  contract: 'Contract',
-  internship: 'Internship',
-}
-
-const { locale } = useI18n()
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString(locale.value, {
@@ -254,16 +295,16 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
       <div class="mb-5 flex size-16 items-center justify-center rounded-full bg-surface-100 dark:bg-surface-800">
         <Briefcase class="size-7 text-surface-400" />
       </div>
-      <h1 class="text-xl font-bold text-surface-900 dark:text-surface-100 mb-2">Job Not Found</h1>
+      <h1 class="text-xl font-bold text-surface-900 dark:text-surface-100 mb-2">{{ t('jobs.detail.notFoundTitle') }}</h1>
       <p class="text-sm text-surface-500 mb-6 max-w-xs">
-        This position may no longer be available or is not currently accepting applications.
+        {{ t('jobs.detail.notFoundBody') }}
       </p>
       <NuxtLink
         :to="$localePath('/jobs')"
         class="inline-flex items-center gap-1.5 rounded-xl border border-surface-300 dark:border-surface-700 px-5 py-2.5 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors shadow-sm"
       >
         <ArrowLeft class="size-4" />
-        Browse all positions
+        {{ t('jobs.detail.browseAll') }}
       </NuxtLink>
     </div>
 
@@ -275,7 +316,7 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
         class="inline-flex items-center gap-1.5 text-sm text-surface-500 hover:text-surface-800 dark:hover:text-surface-200 transition-colors mb-6 group"
       >
         <ArrowLeft class="size-3.5 transition-transform group-hover:-translate-x-0.5" />
-        All positions
+        {{ t('jobs.detail.allPositions') }}
       </NuxtLink>
 
       <!-- Job hero card -->
@@ -308,7 +349,7 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
               v-if="job.salaryNegotiable || formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, job.salaryUnit)"
               class="inline-flex items-center gap-1.5 rounded-full border border-success-200 dark:border-success-800 bg-success-50 dark:bg-success-950 px-3 py-1 text-xs font-semibold text-success-700 dark:text-success-300"
             >
-              {{ job.salaryNegotiable ? 'Negotiable' : formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, job.salaryUnit) }}
+              {{ job.salaryNegotiable ? t('jobs.detail.negotiable') : formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, job.salaryUnit) }}
             </span>
           </div>
 
@@ -318,7 +359,7 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
 
           <p class="inline-flex items-center gap-1.5 text-xs text-surface-400">
             <Calendar class="size-3.5" />
-            Posted {{ formatDate(job.createdAt) }}
+            {{ t('jobs.detail.postedOn', { date: formatDate(job.createdAt) }) }}
           </p>
 
           <!-- Apply CTA inline -->
@@ -327,18 +368,50 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
               :to="{ path: $localePath(`/jobs/${job.slug}/apply`), query: applyQuery }"
               class="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-700 active:scale-[0.98] transition-all shadow-sm"
             >
-              Apply Now
+              {{ t('jobs.detail.applyNow') }}
               <ExternalLink class="size-3.5" />
             </NuxtLink>
-            <p class="text-xs text-surface-400">Takes a few minutes · No account required</p>
+            <p class="text-xs text-surface-400">{{ t('jobs.detail.applyTime') }}</p>
           </div>
+
+          <!-- Branded path to the organization's career page and other roles -->
+          <NuxtLink
+            v-if="job.careerPageSlug"
+            :to="{ path: $localePath(`/career/${job.careerPageSlug}`), query: applyQuery }"
+            class="group mt-6 flex w-full items-center gap-3 border-t border-surface-100 pt-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-4 dark:border-surface-800 dark:focus-visible:ring-offset-surface-900"
+          >
+            <span
+              class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border shadow-sm"
+              :class="job.organizationLogo && !organizationLogoFailed
+                ? 'border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800'
+                : 'border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-brand-950'"
+            >
+              <img
+                v-if="job.organizationLogo && !organizationLogoFailed"
+                :src="job.organizationLogo"
+                :alt="t('jobs.detail.companyLogoAlt', { name: job.organizationName })"
+                class="size-full object-contain p-1.5"
+                @error="organizationLogoFailed = true"
+              >
+              <Building2 v-else class="size-6 text-brand-700 dark:text-brand-300" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-semibold text-surface-900 transition-colors group-hover:text-brand-700 dark:text-surface-100 dark:group-hover:text-brand-300">
+                {{ t('jobs.detail.careerPageTitle', { name: job.organizationName }) }}
+              </span>
+              <span class="mt-0.5 block text-xs leading-5 text-surface-500 dark:text-surface-400">
+                {{ t('jobs.detail.careerPageDescription') }}
+              </span>
+            </span>
+            <ChevronRight class="size-5 shrink-0 text-brand-500 transition-transform group-hover:translate-x-0.5 group-hover:text-brand-700 dark:text-brand-400 dark:group-hover:text-brand-300" />
+          </NuxtLink>
         </div>
       </div>
 
       <!-- Description card -->
       <div v-if="job.description" class="rounded-2xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 shadow-sm overflow-hidden mb-5">
         <div class="border-b border-surface-100 dark:border-surface-800 px-6 sm:px-8 py-4">
-          <h2 class="text-sm font-semibold text-surface-900 dark:text-surface-100">About this role</h2>
+          <h2 class="text-sm font-semibold text-surface-900 dark:text-surface-100">{{ t('jobs.detail.aboutRole') }}</h2>
         </div>
         <div class="px-6 sm:px-8 py-6">
           <MarkdownDescription :value="job.description" />
@@ -348,15 +421,14 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
       <!-- Questions preview card -->
       <div v-if="job.questions && job.questions.length > 0" class="rounded-2xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 shadow-sm overflow-hidden mb-5">
         <div class="border-b border-surface-100 dark:border-surface-800 px-6 sm:px-8 py-4 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-surface-900 dark:text-surface-100">Application questions</h2>
+          <h2 class="text-sm font-semibold text-surface-900 dark:text-surface-100">{{ t('jobs.detail.questionsTitle') }}</h2>
           <span class="rounded-full bg-surface-100 dark:bg-surface-800 px-2.5 py-0.5 text-xs font-medium text-surface-600 dark:text-surface-400">
             {{ job.questions.length }}
           </span>
         </div>
         <div class="px-6 sm:px-8 py-5">
           <p class="text-sm text-surface-500 mb-4">
-            You'll be asked to answer {{ job.questions.length }}
-            additional question{{ job.questions.length === 1 ? '' : 's' }} when you apply.
+            {{ t('jobs.detail.questionsIntro', { count: job.questions.length }, job.questions.length) }}
           </p>
           <ul class="divide-y divide-surface-100 dark:divide-surface-800">
             <li
@@ -369,7 +441,7 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
                 v-if="q.required"
                 class="shrink-0 rounded-full bg-danger-50 dark:bg-danger-950 border border-danger-100 dark:border-danger-900 px-2 py-0.5 text-xs font-medium text-danger-600 dark:text-danger-400"
               >
-                Required
+                {{ t('jobs.detail.required') }}
               </span>
             </li>
           </ul>
@@ -379,14 +451,14 @@ function formatSalary(min?: number | null, max?: number | null, currency?: strin
       <!-- Bottom Apply CTA -->
       <div class="rounded-2xl border border-brand-100 dark:border-brand-900 bg-brand-50 dark:bg-brand-950/50 px-6 sm:px-8 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <p class="text-sm font-semibold text-surface-900 dark:text-surface-100">Ready to apply?</p>
-          <p class="text-sm text-surface-500 mt-0.5">Submit your application in just a few minutes.</p>
+          <p class="text-sm font-semibold text-surface-900 dark:text-surface-100">{{ t('jobs.detail.readyTitle') }}</p>
+          <p class="text-sm text-surface-500 mt-0.5">{{ t('jobs.detail.readyBody') }}</p>
         </div>
         <NuxtLink
           :to="{ path: $localePath(`/jobs/${job.slug}/apply`), query: applyQuery }"
           class="shrink-0 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-700 active:scale-[0.98] transition-all shadow-sm"
         >
-          Apply for this position
+          {{ t('jobs.detail.applyForPosition') }}
           <ExternalLink class="size-3.5" />
         </NuxtLink>
       </div>

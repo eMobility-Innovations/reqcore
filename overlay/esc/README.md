@@ -1,8 +1,9 @@
-# ESC overlay — `escooterclinic/reqcore` (branch `esc`, deployed on 001esc **CT213**)
+# ESC overlay — `eMobility-Innovations/reqcore` (branch `esc-live`, deployed on esc03 **CT213**)
 
-This is a **fork** of upstream `reqcore-inc/reqcore` (remote: `origin`, HTTPS).
-The deploy branch is **`esc`** (remote: `fork` = `git@github-reqcore:escooterclinic/reqcore.git`).
-One Docker image, three runtime configs, three public surfaces.
+This is a **fork** of upstream `reqcore-inc/reqcore` (remote: `upstream`).
+The deploy branch is **`esc-live`**, on `eMobility-Innovations/reqcore` — the same repository
+`escooterclinic/reqcore` used to name, seen through a rename redirect, not a third copy.
+CT213's clone still calls it `fork`. One Docker image, three runtime configs, three public surfaces.
 
 > **Prime directive: stay upstream-mergeable.** Every deviation is confined to
 > *leaf* files (layouts, pages, a self-contained server plugin/middleware, the
@@ -28,7 +29,10 @@ They share the same Postgres + MinIO as the admin app.
 
 Redeploy (after a code/asset change):
 ```bash
-ssh ct213 'cd /opt/reqcore && docker compose build app-esc app-public && docker compose up -d app-esc app-public'
+# ALL THREE build from the same source. `app` is the admin ATS on ats.fiszu.com — the surface
+# actually holding candidate PII — and leaving it out of the build list is how it ended up running
+# a 2026-07-13 image on 2026-08-12 while the two public boards were rebuilt the same day.
+pssh -r 213 'cd /opt/reqcore && docker compose build app app-public app-esc && docker compose up -d app app-public app-esc'
 # env-only (org/brand) change → `up -d` (recreate) is enough; no rebuild.
 # Push from CT213 is fine UNLESS the diff touches .github/workflows (deploy key lacks workflow scope).
 ```
@@ -37,13 +41,28 @@ ssh ct213 'cd /opt/reqcore && docker compose build app-esc app-public && docker 
 
 ## 2. Update procedure — pull upstream WITHOUT losing our work
 
-> ⚠️ **2026-06-27 reality check: upstream went closed-source.** `reqcore-inc/reqcore` was **replaced with a 2-commit stub** — `8fa49da Initial commit` + `7916463 "Revise README to reflect new direction for Reqcore"` (2026-06-24). The real source history was deleted from the public remote, so `origin/main` now shares **NO common ancestor** with our `esc` branch (`git merge-base origin/main esc` → empty). **`git merge origin/main` brings nothing but a README and would error on unrelated histories.** Our `esc` branch (523 commits, app source from 2026-02-14) is now the **canonical full copy** of reqcore we hold. **Go-forward plan (confirmed): reqcore-inc will hand us the LAST open-source version ONCE. We do a single final sync onto it, then we are permanently on our own.** Prep for that one-time merge:
+> ⚠️ **2026-08-12: the 2026-06-27 "upstream went closed-source" note below was WRONG, and is kept
+> only so nobody re-derives it.** It claimed `reqcore-inc/reqcore` had been replaced by a 2-commit
+> stub sharing no ancestor with our branch, and that we were permanently on our own. Measured on
+> 2026-08-12: `reqcore-inc/reqcore` is actively developed, released `v1.5.0` and `v1.6.0`, and
+> `esc-live` shares a real merge-base with it (`f154021`, 2026-07-03). This branch was resynced onto
+> tag `v1.6.0` by an ordinary merge that same day. The stub that was read as "upstream" was a
+> different repository: GitHub records this fork's *parent* as `hahzterry/reqcore`, a copy of the
+> real upstream frozen on 2026-03-05. See [`docs/UPSTREAM-DIVERGENCE.md`](../../docs/UPSTREAM-DIVERGENCE.md)
+> on `main`. **A `git merge-base --is-ancestor` check is how you tell a dead mirror from a dead
+> project — five months of stale `pushed_at` only suggests it.**
 >
+> <details><summary>The superseded 2026-06-27 note, for the record</summary>
+>
+> ⚠️ **2026-06-27 reality check: upstream went closed-source.** `reqcore-inc/reqcore` was **replaced with a 2-commit stub** — `8fa49da Initial commit` + `7916463 "Revise README to reflect new direction for Reqcore"` (2026-06-24). The real source history was deleted from the public remote, so `origin/main` now shares **NO common ancestor** with our `esc` branch (`git merge-base origin/main esc` → empty). **`git merge origin/main` brings nothing but a README and would error on unrelated histories.** Our `esc` branch (523 commits, app source from 2026-02-14) is now the **canonical full copy** of reqcore we hold. **Go-forward plan (confirmed): reqcore-inc will hand us the LAST open-source version ONCE. We do a single final sync onto it, then we are permanently on our own.** Prep for that one-time merge:
+> 
 > 1. **Snapshot now** (safety net) — our `esc` (523 commits) is the only full copy we hold; tag it: `git tag pre-final-oss-sync esc && git push fork pre-final-oss-sync`.
 > 2. **When the OSS drop lands** (tarball / new repo / tag), add it as a remote `final` (e.g. `git remote add final <url> && git fetch final`).
 > 3. **Compare against our base**, not the stub: our app source starts at `72b89f8` (2026-02-14). Diff `final/main` vs our pre-overlay tree to see what upstream changed; the **overlay discipline** (this doc, §3) means our deltas are confined to leaf files, so re-applying them onto the OSS drop is mechanical.
 > 4. **Strategy:** branch `esc-final` off `final/main`, then cherry-pick / replay ONLY our overlay commits (branding, per-org scoping, `esc-frame-headers.ts`, compose override, `public/brand/*`). Histories are unrelated, so prefer cherry-pick over merge. Validate (build all 3 containers), then make `esc-final` the new deploy branch.
 > 5. **After that, upstream is dead.** No more `origin`; we maintain independently. Keep `overlay/esc/` as the record of what was ever ours.
+>
+> </details>
 
 **Do NOT hard-reset `esc` to upstream.** Merge upstream INTO `esc`:
 ```bash

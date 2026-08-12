@@ -60,6 +60,17 @@ describe('createAiConfigSchema', () => {
     }
   })
 
+  it('accepts OpenRouter provider', () => {
+    const result = createAiConfigSchema.safeParse({
+      name: 'OpenRouter',
+      provider: 'openrouter',
+      model: 'openai/gpt-5.4-mini',
+      apiKey: 'sk-or-test123',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
   it('rejects unknown provider', () => {
     const result = createAiConfigSchema.safeParse({
       name: 'Ollama Local',
@@ -183,4 +194,3 @@ describe('updateAiConfigSchema', () => {
     expect(result.success).toBe(false)
   })
 })
-
