@@ -1,6 +1,7 @@
 import { eq, and } from 'drizzle-orm'
 import { application } from '../../database/schema'
 import { applicationIdParamSchema } from '../../utils/schemas/application'
+import { loadPropertyEntriesForEntity } from '../../utils/properties'
 
 /**
  * GET /api/applications/:id
@@ -48,5 +49,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
 
-  return result
+  const properties = await loadPropertyEntriesForEntity({
+    organizationId: orgId,
+    entityType: 'application',
+    entityId: result.id,
+    jobId: result.jobId,
+  })
+
+  return { ...result, properties }
 })

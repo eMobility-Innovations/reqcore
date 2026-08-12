@@ -21,6 +21,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
+  if (isDemoAccountEmail(session.user.email)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'The demo account cannot request access to other organizations.',
+    })
+  }
+
   const body = await readValidatedBody(event, createJoinRequestSchema.parse)
 
   // ── Verify the organization exists ──

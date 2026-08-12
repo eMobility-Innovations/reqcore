@@ -15,7 +15,7 @@ const safeBaseUrl = z.string().url().max(500)
 
 export const createAiConfigSchema = z.object({
   name: z.string().min(1).max(80).trim(),
-  provider: z.enum(['openai', 'anthropic', 'google', 'openai_compatible']),
+  provider: z.enum(['openai', 'anthropic', 'google', 'openai_compatible', 'openrouter']),
   model: z.string().min(1).max(200),
   apiKey: z.string().min(1).max(500),
   baseUrl: safeBaseUrl.nullish(),
@@ -29,13 +29,16 @@ export const createAiConfigSchema = z.object({
 
 export const updateAiConfigSchema = z.object({
   name: z.string().min(1).max(80).trim().optional(),
-  provider: z.enum(['openai', 'anthropic', 'google', 'openai_compatible']).optional(),
+  provider: z.enum(['openai', 'anthropic', 'google', 'openai_compatible', 'openrouter']).optional(),
   model: z.string().min(1).max(200).optional(),
   apiKey: z.string().min(1).max(500).optional(),
   baseUrl: safeBaseUrl.nullish(),
   maxTokens: z.number().int().min(256).max(200000).optional(),
   inputPricePer1m: z.number().min(0).max(9999).nullish(),
   outputPricePer1m: z.number().min(0).max(9999).nullish(),
+  // Only the platform ("company") config uses this — it is server-managed and
+  // can only be enabled or disabled, never edited.
+  isEnabled: z.boolean().optional(),
 })
 
 export const setAiConfigDefaultSchema = z.object({
@@ -49,10 +52,11 @@ const criterionCategoryValues = ['technical', 'experience', 'soft_skills', 'educ
 
 export const createCriterionSchema = z.object({
   key: z.string()
+    .trim()
     .min(1).max(100)
     .regex(/^[a-z][a-z0-9_]*$/, 'Key must be lowercase alphanumeric with underscores, starting with a letter'),
-  name: z.string().min(1).max(200),
-  description: z.string().max(1000).nullish(),
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(1000).nullish(),
   category: z.enum(criterionCategoryValues).optional().default('custom'),
   maxScore: z.number().int().min(1).max(100).optional().default(10),
   weight: z.number().int().min(0).max(100).optional().default(50),

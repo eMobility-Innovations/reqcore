@@ -25,6 +25,10 @@ export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { activityLog: ['read'] })
   const orgId = session.session.activeOrganizationId
 
+  // The org-wide activity timeline is a Team+ entitlement. Per-candidate history
+  // (candidate-timeline.get.ts) stays available on every plan.
+  await assertPlanFeature(orgId, 'activityTimeline')
+
   const query = await getValidatedQuery(event, timelineQuerySchema.parse)
 
   const conditions = [eq(activityLog.organizationId, orgId)]

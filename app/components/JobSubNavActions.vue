@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { UserPlus, Pencil, Trash2, MoreHorizontal, Brain } from 'lucide-vue-next'
+import { UserPlus, Pencil, Trash2, MoreHorizontal, Brain, Settings2 } from 'lucide-vue-next'
 import { JOB_STATUS_TRANSITIONS } from '~~/shared/status-transitions'
 
 const props = defineProps<{
@@ -182,6 +182,18 @@ watch(showMoreMenu, (val) => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
 })
+
+// ─────────────────────────────────────────────
+// Property schema editor (per-job)
+// ─────────────────────────────────────────────
+
+const showPropertyEditor = ref(false)
+const propertyEditorScope = ref<'org' | 'job'>('job')
+function openPropertyEditor(scope: 'org' | 'job') {
+  propertyEditorScope.value = scope
+  showPropertyEditor.value = true
+  showMoreMenu.value = false
+}
 </script>
 
 <template>
@@ -229,21 +241,21 @@ onBeforeUnmount(() => {
             <div
               v-if="showMoreMenu"
               :style="{ position: 'fixed', top: moreMenuPos.top + 'px', right: moreMenuPos.right + 'px' }"
-              class="z-[200] w-52 rounded-xl border border-surface-200 dark:border-surface-700/80 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/5 dark:shadow-black/20 py-1.5 origin-top-right"
+              class="z-[200] w-64 rounded-xl border border-surface-200 dark:border-surface-700/80 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/5 dark:shadow-black/20 py-1.5 origin-top-right"
             >
               <NuxtLink
                 :to="localePath(`/dashboard/jobs/${jobId}/settings`)"
                 class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 transition-colors"
                 @click="showMoreMenu = false"
               >
-                <Pencil class="size-3.5 text-surface-400" />
+                <Pencil class="size-3.5 shrink-0 text-surface-400" />
                 Edit Job
               </NuxtLink>
               <button
                 class="flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 transition-colors sm:hidden"
                 @click="showApplyModal = true; showMoreMenu = false"
               >
-                <UserPlus class="size-3.5 text-surface-400" />
+                <UserPlus class="size-3.5 shrink-0 text-surface-400" />
                 Add Candidate
               </button>
               <div class="border-t border-surface-100 dark:border-surface-800 my-1.5 mx-2" />
@@ -252,8 +264,22 @@ onBeforeUnmount(() => {
                 class="flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 transition-colors disabled:opacity-50"
                 @click="scoreAllCandidates()"
               >
-                <Brain class="size-3.5 text-surface-400" />
+                <Brain class="size-3.5 shrink-0 text-surface-400" />
                 {{ isScoringAll ? `Scoring ${scoringProgress.done}/${scoringProgress.total}…` : 'Score All Candidates' }}
+              </button>
+              <button
+                class="flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 transition-colors"
+                @click="openPropertyEditor('job')"
+              >
+                <Settings2 class="size-3.5 shrink-0 text-surface-400" />
+                Job-specific properties
+              </button>
+              <button
+                class="flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/80 transition-colors"
+                @click="openPropertyEditor('org')"
+              >
+                <Settings2 class="size-3.5 shrink-0 text-surface-400" />
+                Org-wide properties
               </button>
               <template v-if="secondaryJobTransitions.length > 0">
                 <div class="border-t border-surface-100 dark:border-surface-800 my-1.5 mx-2" />
@@ -272,7 +298,7 @@ onBeforeUnmount(() => {
                 class="flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2 text-sm text-danger-600 dark:text-danger-400 hover:bg-danger-50 dark:hover:bg-danger-950/60 transition-colors"
                 @click="showDeleteConfirm = true; showMoreMenu = false"
               >
-                <Trash2 class="size-3.5" />
+                <Trash2 class="size-3.5 shrink-0" />
                 Delete Job
               </button>
             </div>
@@ -281,6 +307,14 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </Teleport>
+
+  <!-- Property schema editor (per-job application properties) -->
+  <PropertySchemaEditor
+    :open="showPropertyEditor"
+    entity-type="application"
+    :job-id="propertyEditorScope === 'job' ? jobId : null"
+    @close="showPropertyEditor = false"
+  />
 
   <!-- Delete Job Confirm -->
   <Teleport to="body">

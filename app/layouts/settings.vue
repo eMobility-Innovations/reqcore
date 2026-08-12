@@ -5,8 +5,11 @@ import { usePreviewReadOnly } from '~/composables/usePreviewReadOnly'
 const { data: session } = await authClient.useSession(useFetch)
 
 const config = useRuntimeConfig()
+const route = useRoute()
 const { activeOrg } = useCurrentOrg()
 const { isUpsellOpen, closeUpsell } = usePreviewReadOnly()
+
+const isFullbleed = computed(() => !!route.meta.fullbleed)
 
 const isDemo = computed(() => {
   const slug = config.public.demoOrgSlug
@@ -17,7 +20,10 @@ const isDemoAccount = computed(() => session.value?.user?.email === 'demo@reqcor
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col bg-surface-50 dark:bg-surface-950">
+  <div
+    class="flex flex-col bg-surface-50 dark:bg-surface-950"
+    :class="isFullbleed ? 'h-screen overflow-hidden' : 'min-h-screen'"
+  >
     <!-- AppTopBar: desktop only -->
     <AppTopBar class="hidden lg:block" />
     <AppToasts />
@@ -43,7 +49,10 @@ const isDemoAccount = computed(() => session.value?.user?.email === 'demo@reqcor
       </span>
     </div>
 
-    <div class="flex flex-1 flex-col lg:flex-row min-w-0">
+    <div
+      class="flex flex-1 flex-col lg:flex-row min-w-0"
+      :class="isFullbleed && 'min-h-0 overflow-hidden'"
+    >
       <!-- Desktop sidebar -->
       <div class="hidden lg:block sticky top-14 h-[calc(100vh-3.5rem)] shrink-0 z-10">
         <SettingsSidebar />
@@ -53,7 +62,12 @@ const isDemoAccount = computed(() => session.value?.user?.email === 'demo@reqcor
         <SettingsMobileNav />
       </div>
       <!-- Page content -->
-      <main class="flex-1 min-w-0 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+      <main
+        class="flex-1 min-w-0"
+        :class="isFullbleed
+          ? 'flex min-h-0 flex-col overflow-y-auto lg:overflow-hidden'
+          : 'px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8'"
+      >
         <slot />
       </main>
     </div>

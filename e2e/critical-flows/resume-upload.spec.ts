@@ -1,5 +1,5 @@
 import { type Browser } from '@playwright/test'
-import { test, expect } from '../fixtures'
+import { test, expect, declineAnalyticsConsent, getPublishedApplicationLink } from '../fixtures'
 import {
   VALID_FILE_CONFIGS,
   INVALID_FILE_CONFIGS,
@@ -50,6 +50,7 @@ test.describe('Resume Upload — All File Formats', () => {
     // We need a fresh authenticated page to set up the job.
     // Re-use the same signup logic from fixtures.ts.
     const context = await browser.newContext()
+    await declineAnalyticsConsent(context)
     const page = await context.newPage()
 
     const id = `${Date.now()}-setup`
@@ -90,15 +91,36 @@ test.describe('Resume Upload — All File Formats', () => {
           resp => resp.url().includes('/api/auth/sign-in') && resp.status() === 200,
           { timeout: 30_000 },
         ),
-        page.getByRole('button', { name: 'Sign in' }).click(),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
       ])
-      await page.waitForURL('**/onboarding/**', { waitUntil: 'commit', timeout: 30_000 })
+      await page.goto('/onboarding/create-org')
     }
 
     await page.getByLabel('Organization name').waitFor({ state: 'visible', timeout: 30_000 })
     await page.getByLabel('Organization name').fill(account.orgName)
     await page.getByRole('button', { name: 'Create organization' }).click()
-    await page.waitForURL('**/dashboard**', { waitUntil: 'commit' })
+    await page.waitForURL(
+      url => url.pathname.includes('/dashboard') || url.pathname.includes('/auth/sign-in') || url.pathname.includes('/onboarding/welcome'),
+      { waitUntil: 'commit', timeout: 30_000 },
+    )
+
+    if (page.url().includes('/onboarding/welcome')) {
+      await page.goto('/dashboard')
+    }
+
+    if (page.url().includes('/auth/sign-in')) {
+      await page.getByLabel('Email').fill(account.email)
+      await page.getByLabel('Password').fill(account.password)
+      await Promise.all([
+        page.waitForResponse(
+          resp => resp.url().includes('/api/auth/sign-in') && resp.status() === 200,
+          { timeout: 30_000 },
+        ),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+      ])
+      await page.goto('/dashboard')
+    }
+    await page.waitForLoadState('networkidle')
 
     // ── Create job ─────────────────────────────────────────────────────────
 
@@ -149,7 +171,7 @@ test.describe('Resume Upload — All File Formats', () => {
 
     await expect(page.getByRole('heading', { name: 'Your job is live!' })).toBeVisible({ timeout: 20_000 })
 
-    applicationLink = await page.locator('input[readonly]').inputValue()
+    applicationLink = await getPublishedApplicationLink(page)
     expect(applicationLink).toMatch(/\/jobs\/[^/]+\/apply(?:$|[?#])/)
     const slugMatch = applicationLink.match(/\/jobs\/([^/]+)\/apply(?:$|[?#])/)
     jobSlug = slugMatch?.[1] ?? ''
@@ -204,6 +226,7 @@ async function assertUploadResult(
   const candidate = applicant(idx)
 
   const ctx = await browser.newContext()
+  await declineAnalyticsConsent(ctx)
   const page = await ctx.newPage()
 
   await page.goto(applicationLink)
@@ -274,7 +297,7 @@ async function assertUploadResult(
       waitUntil: 'commit',
       timeout: 15_000,
     })
-    await expect(page.getByRole('heading', { name: 'Application Submitted!' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Application received' })).toBeVisible()
   } else {
     // Server should reject with 400
     expect(status, `${fileConfig.label}: expected 400 but got ${status}`).toBe(400)

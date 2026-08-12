@@ -1,4 +1,4 @@
-const DEFAULT_PREVIEW_MESSAGE = 'This is a read-only demo so you can explore the interface. Editing is disabled here, but it\'s fully unlocked when you self-host.'
+const DEFAULT_PREVIEW_MESSAGE = 'This is a read-only demo so you can explore the interface. Editing is fully unlocked when you sign up.'
 
 type PreviewReadOnlyErrorData = {
   code?: string

@@ -75,6 +75,12 @@ export function useOrgSettings() {
   async function updateSettings(payload: {
     nameDisplayFormat?: 'first_last' | 'last_first'
     dateFormat?: 'mdy' | 'dmy' | 'ymd'
+    retentionEnabled?: boolean
+    retentionMonths?: number
+    quarantineDays?: number
+    privacyPolicyUrl?: string | null
+    privacyPolicyText?: string | null
+    privacyContactEmail?: string | null
   }) {
     await $fetch('/api/org-settings', {
       method: 'PATCH',
@@ -84,6 +90,7 @@ export function useOrgSettings() {
   }
 
   return {
+    settings: data,
     nameDisplayFormat,
     dateFormat,
     status,

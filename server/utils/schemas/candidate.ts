@@ -60,6 +60,8 @@ export const candidateQuerySchema = z.object({
   gender: z.enum(genderValues).optional(),
   dobFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dobFrom must be YYYY-MM-DD').optional(),
   dobTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dobTo must be YYYY-MM-DD').optional(),
+  /** JSON-encoded array of { propertyDefinitionId, op, value } filters */
+  propertyFilters: z.string().optional(),
 })
 
 /** Reusable schema for `:id` route params */

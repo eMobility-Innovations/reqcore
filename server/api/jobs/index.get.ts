@@ -35,6 +35,8 @@ export default defineEventHandler(async (event) => {
         location: true,
         type: true,
         status: true,
+        experienceLevel: true,
+        remoteStatus: true,
         createdAt: true,
         updatedAt: true,
       },

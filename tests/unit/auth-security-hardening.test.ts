@@ -125,9 +125,10 @@ describe('Rate limiting configuration', () => {
     expect(rateLimitConfig.max).toBeLessThanOrEqual(200)
   })
 
-  it('is disabled in CI environments', () => {
-    // Rate limiting is disabled when CI or GITHUB_ACTIONS env vars are set
-    // to prevent E2E test failures in Docker-based CI pipelines
+  it('is disabled in CI environments (Better Auth internal limiter only)', () => {
+    // Better Auth's internal rate limiter is disabled in CI to prevent E2E
+    // test flakiness. The apply-endpoint rate limiter uses NODE_ENV instead
+    // and must not be bypassed via CI env vars in production.
     const ciConfig = { enabled: !('CI' in process.env) && !('GITHUB_ACTIONS' in process.env) }
     if (process.env.CI || process.env.GITHUB_ACTIONS) {
       expect(ciConfig.enabled).toBe(false)

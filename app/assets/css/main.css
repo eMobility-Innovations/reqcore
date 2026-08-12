@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+@source "../../../shared/properties.ts";
+@source "../../../ee/app/**/*.{vue,ts}";
 
 /* ─────────────────────────────────────────────────────────
    Reqcore — Design System
@@ -121,6 +123,8 @@
   --color-info-800: oklch(44.3% 0.110 241);
   --color-info-900: oklch(39.1% 0.090 241);
   --color-info-950: oklch(18.0% 0.035 243);
+
+
 }
 
 /* ── Base reset & defaults ──────────────────────────────── */
@@ -234,9 +238,15 @@
 
 /* ── Bento card subtle border-glow (Supabase-style) ───── */
 .bento-card {
+  background: oklch(98.5% 0.002 264);
+  border: 1px solid oklch(93.0% 0.006 264);
+}
+
+.dark .bento-card {
   background:
     linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 100%),
     #0c0c0f;
+  border: none;
 }
 
 /* ── Tech stack cards (Linear-style premium) ──────────── */
@@ -286,6 +296,10 @@
 }
 
 .bento-card::before {
+  content: none; /* hidden in light mode */
+}
+
+.dark .bento-card::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -306,6 +320,11 @@
 }
 
 .bento-card:hover {
+  background: oklch(96.5% 0.004 264);
+  border-color: oklch(87.0% 0.008 264);
+}
+
+.dark .bento-card:hover {
   background:
     linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.005) 100%),
     #0c0c0f;

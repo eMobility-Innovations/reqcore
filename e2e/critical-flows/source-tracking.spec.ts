@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures'
+import { test, expect, declineAnalyticsConsent, getPublishedApplicationLink } from '../fixtures'
 
 /**
  * Critical flow: Source tracking query parameters (?ref=, utm_*) propagate
@@ -59,7 +59,7 @@ test.describe('Source Tracking — Query Parameter Propagation', () => {
     await expect(page.getByRole('heading', { name: 'Your job is live!' })).toBeVisible({ timeout: 20_000 })
 
     // Capture the slug from the application link
-    const applicationLink = await page.locator('input[readonly]').inputValue()
+    const applicationLink = await getPublishedApplicationLink(page)
     const slugMatch = applicationLink.match(/\/jobs\/([^/]+)\/apply/)
     const jobSlug = slugMatch?.[1] ?? ''
     expect(jobSlug.length, 'Job slug must not be empty').toBeGreaterThan(0)
@@ -67,6 +67,7 @@ test.describe('Source Tracking — Query Parameter Propagation', () => {
     // ── Step 2: Candidate navigates from job listing with tracking params ──────
 
     const candidateContext = await browser.newContext()
+    await declineAnalyticsConsent(candidateContext)
     const candidatePage = await candidateContext.newPage()
 
     const REF_CODE = 'TRACK_E2E_123'
@@ -137,7 +138,7 @@ test.describe('Source Tracking — Query Parameter Propagation', () => {
       waitUntil: 'commit',
       timeout: 15_000,
     })
-    await expect(candidatePage.getByRole('heading', { name: 'Application Submitted!' })).toBeVisible()
+    await expect(candidatePage.getByRole('heading', { name: 'Application received' })).toBeVisible()
 
     await candidatePage.close()
     await candidateContext.close()

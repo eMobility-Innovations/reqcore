@@ -14,6 +14,12 @@ useSeoMeta({
 const { allowed: canManageSso } = usePermission({ organization: ['update'] })
 const { track } = useTrack()
 
+// SSO / SAML / SCIM is a Scale+ feature (server gates provider registration).
+// Existing providers stay visible/removable on any plan; only adding is locked.
+const { hasFeature } = usePlanFeature()
+const canUseSso = computed(() => hasFeature('sso'))
+const canAddSso = computed(() => canManageSso.value && canUseSso.value)
+
 // ─────────────────────────────────────────────
 // Fetch existing SSO providers
 // ─────────────────────────────────────────────
@@ -169,6 +175,8 @@ async function copyCallbackUrl(providerId: string) {
       </p>
     </div>
 
+    <FeatureLockCard v-if="!canUseSso" feature="sso" class="mb-6" />
+
     <!-- Success/Error Messages -->
     <Transition name="fade">
       <div
@@ -303,7 +311,7 @@ async function copyCallbackUrl(providerId: string) {
           Connect your corporate identity provider so your team can sign in with their work accounts — no separate passwords needed.
         </p>
         <button
-          v-if="canManageSso"
+          v-if="canAddSso"
           class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
           @click="showForm = true"
         >
@@ -313,7 +321,7 @@ async function copyCallbackUrl(providerId: string) {
       </div>
 
       <!-- Add another provider (when one already exists) -->
-      <div v-if="hasProvider && !showForm && canManageSso" class="mb-6">
+      <div v-if="hasProvider && !showForm && canAddSso" class="mb-6">
         <button
           class="inline-flex items-center gap-1.5 rounded-lg border border-surface-200 dark:border-surface-700 px-3.5 py-2 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
           @click="showForm = true"

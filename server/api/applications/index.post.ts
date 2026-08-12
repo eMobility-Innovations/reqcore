@@ -1,6 +1,7 @@
 import { eq, and } from 'drizzle-orm'
-import { application, candidate, job } from '../../database/schema'
+import { application, job } from '../../database/schema'
 import { createApplicationSchema } from '../../utils/schemas/application'
+import { findActiveCandidate } from '../../utils/candidate-retention'
 
 /**
  * POST /api/applications
@@ -14,13 +15,10 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, createApplicationSchema.parse)
 
   // Verify candidate belongs to this org
-  const existingCandidate = await db.query.candidate.findFirst({
-    where: and(eq(candidate.id, body.candidateId), eq(candidate.organizationId, orgId)),
-    columns: { id: true },
-  })
+  const existingCandidate = await findActiveCandidate(orgId, body.candidateId)
 
   if (!existingCandidate) {
-    throw createError({ statusCode: 404, statusMessage: 'Candidate not found' })
+    throw createError({ statusCode: 409, statusMessage: 'Candidate is quarantined or not found' })
   }
 
   // Verify job belongs to this org

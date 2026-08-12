@@ -21,6 +21,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
+  if (isDemoAccountEmail(session.user.email)) {
+    return []
+  }
+
   const query = await getValidatedQuery(event, orgSearchSchema.parse)
   const searchTerm = query.q.trim().toLowerCase()
 

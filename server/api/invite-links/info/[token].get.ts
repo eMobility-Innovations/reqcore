@@ -1,4 +1,5 @@
 import { eq, and, isNull, gt } from 'drizzle-orm'
+import { z } from 'zod'
 import { inviteLink, organization, user } from '../../../database/schema'
 
 /**
@@ -11,11 +12,10 @@ import { inviteLink, organization, user } from '../../../database/schema'
  * Token is validated but not returned.
  */
 export default defineEventHandler(async (event) => {
-  const token = getRouterParam(event, 'token')
-
-  if (!token || token.length > 128) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid token' })
-  }
+  const { token } = await getValidatedRouterParams(
+    event,
+    z.object({ token: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid invite token') }).parse,
+  )
 
   const [link] = await db
     .select({

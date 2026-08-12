@@ -21,6 +21,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
+  if (isDemoAccountEmail(session.user.email)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'The demo account cannot join other organizations.',
+    })
+  }
+
   const body = await readValidatedBody(event, acceptInviteLinkSchema.parse)
 
   // ── Step 2: Validate the token ──

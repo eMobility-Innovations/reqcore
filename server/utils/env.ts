@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveDatabaseUrl } from "./database-url";
 
 /**
  * Preprocessor that normalizes empty strings to undefined.
@@ -99,11 +100,24 @@ export const envSchema = z
       .optional(),
     /** Resend API key for transactional emails (invitations, etc.). When not set, emails are logged to console. */
     RESEND_API_KEY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Full-access Resend API key used only to retrieve inbound candidate emails. */
+    RESEND_RECEIVING_API_KEY: emptyToUndefined.pipe(z.string().min(1)).optional(),
     /** Sender email address for Resend emails. Must be a verified domain in Resend. Defaults to "Reqcore <noreply@reqcore.com>". */
     RESEND_FROM_EMAIL: emptyToUndefined
       .pipe(z.string().min(1))
       .optional()
       .default("Reqcore <noreply@reqcore.com>"),
+    /** Reply-friendly sender identity used only for candidate conversations. */
+    RESEND_CANDIDATE_FROM_EMAIL: emptyToUndefined
+      .pipe(z.string().min(1))
+      .optional()
+      .default("Reqcore Messages <messages@reqcore.com>"),
+    /** Dedicated inbound subdomain used for per-conversation Reply-To addresses. */
+    RESEND_REPLY_DOMAIN: emptyToUndefined
+      .pipe(z.string().regex(/^(?!https?:\/\/)[a-z0-9.-]+$/i, 'Must be a domain name without a protocol'))
+      .optional(),
+    /** Signing secret for the Resend webhook that handles inbound mail and delivery events. */
+    RESEND_WEBHOOK_SECRET: emptyToUndefined.pipe(z.string().min(16)).optional(),
     /** SMTP hostname for outbound email (e.g. smtp.gmail.com). When set, SMTP is used instead of Resend. */
     SMTP_HOST: emptyToUndefined.pipe(z.string().min(1)).optional(),
     /** SMTP port. Defaults to 587 (STARTTLS). Use 465 for implicit TLS, 25 for unencrypted. */
@@ -150,6 +164,31 @@ export const envSchema = z
     AUTH_MICROSOFT_TENANT_ID: emptyToUndefined.pipe(z.string().min(1)).optional().default('common'),
     /** Shared secret for authenticating cron/scheduled job requests (e.g., webhook renewal). */
     CRON_SECRET: emptyToUndefined.pipe(z.string().min(16)).optional(),
+    /**
+     * Instance-wide master switch for automated GDPR retention processing.
+     * Fail-closed: defaults to OFF so an irreversible erasure sweep never runs
+     * unless an operator explicitly opts in with GDPR_CLEANUP_ENABLED=true.
+     * Organization-level `retentionEnabled` is a second, independent guard — both
+     * must be on for any candidate to be quarantined or erased. Setting this to
+     * false also serves as the instance-wide emergency pause.
+     */
+    GDPR_CLEANUP_ENABLED: z.preprocess(
+      val => val === undefined || val === '' ? false : val === true || val === 'true',
+      z.boolean().default(false),
+    ),
+    // ── Platform AI gateway (optional) ──────────────────────────
+    // When OPENROUTER_API_KEY is set, orgs without their own AI config fall back
+    // to our platform key, routed through OpenRouter for unified billing and
+    // analytics. Platform-paid runs are subject to the budget gate (utils/ai/
+    // budget.ts); BYOK orgs are unaffected. Leave unset to keep BYOK-only.
+    /** OpenRouter API key (sk-or-…). Enables platform-paid AI for orgs without their own key. */
+    OPENROUTER_API_KEY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Default model for platform-paid runs, OpenRouter-prefixed. Defaults to openai/gpt-5.4-mini. */
+    OPENROUTER_MODEL: emptyToUndefined.pipe(z.string().min(1)).optional().default('openai/gpt-5.4-mini'),
+    /** Global platform-wide daily AI spend cap in USD (runaway-loop kill-switch). Defaults to 25. */
+    AI_DAILY_SPEND_CAP_USD: emptyToUndefined
+      .pipe(z.string().regex(/^\d+(\.\d+)?$/, 'Must be a number'))
+      .optional(),
     /** OIDC client ID for SSO authentication (e.g., Keycloak, Authentik, Authelia, Okta). */
     OIDC_CLIENT_ID: emptyToUndefined.pipe(z.string().min(1)).optional(),
     /** OIDC client secret for SSO authentication. */
@@ -166,6 +205,27 @@ export const envSchema = z
       .pipe(z.string().min(1))
       .optional()
       .default("SSO"),
+
+    // ── Stripe Billing (optional) ───────────────────────────
+    // When STRIPE_SECRET_KEY is set, self-serve subscription checkout is enabled.
+    // All Stripe vars are all-or-none (enforced in superRefine below): leaving
+    // STRIPE_SECRET_KEY unset disables billing entirely (self-hosters unaffected).
+    /** Stripe secret API key (sk_test_… / sk_live_…). Enables the billing feature when set. */
+    STRIPE_SECRET_KEY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe webhook signing secret (whsec_…). Verifies authenticity of webhook events. */
+    STRIPE_WEBHOOK_SECRET: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Solo, monthly billing. */
+    STRIPE_PRICE_SOLO_MONTHLY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Solo, annual billing. */
+    STRIPE_PRICE_SOLO_ANNUAL: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Team, monthly billing. */
+    STRIPE_PRICE_TEAM_MONTHLY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Team, annual billing. */
+    STRIPE_PRICE_TEAM_ANNUAL: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Scale, monthly billing. */
+    STRIPE_PRICE_SCALE_MONTHLY: emptyToUndefined.pipe(z.string().min(1)).optional(),
+    /** Stripe recurring price id for Scale, annual billing. */
+    STRIPE_PRICE_SCALE_ANNUAL: emptyToUndefined.pipe(z.string().min(1)).optional(),
   })
   .superRefine((data, ctx) => {
     // BETTER_AUTH_URL can be derived at runtime from RAILWAY_PUBLIC_DOMAIN,
@@ -206,7 +266,64 @@ export const envSchema = z
         });
       }
     }
+
+    // Stripe billing requires all vars or none. Partial config would otherwise
+    // disable billing/webhooks silently, leaving checkout state stale.
+    const stripeVars = [
+      ["STRIPE_SECRET_KEY", data.STRIPE_SECRET_KEY],
+      ["STRIPE_WEBHOOK_SECRET", data.STRIPE_WEBHOOK_SECRET],
+      ["STRIPE_PRICE_SOLO_MONTHLY", data.STRIPE_PRICE_SOLO_MONTHLY],
+      ["STRIPE_PRICE_SOLO_ANNUAL", data.STRIPE_PRICE_SOLO_ANNUAL],
+      ["STRIPE_PRICE_TEAM_MONTHLY", data.STRIPE_PRICE_TEAM_MONTHLY],
+      ["STRIPE_PRICE_TEAM_ANNUAL", data.STRIPE_PRICE_TEAM_ANNUAL],
+      ["STRIPE_PRICE_SCALE_MONTHLY", data.STRIPE_PRICE_SCALE_MONTHLY],
+      ["STRIPE_PRICE_SCALE_ANNUAL", data.STRIPE_PRICE_SCALE_ANNUAL],
+    ] as const;
+    const setStripeVars = stripeVars.filter(([, v]) => v);
+    const missingStripeVars = stripeVars.filter(([, v]) => !v);
+
+    if (setStripeVars.length > 0 && missingStripeVars.length > 0) {
+      for (const [name] of missingStripeVars) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [name],
+          message: `${name} is required when Stripe billing is partially configured. Set all Stripe billing variables or none.`,
+        });
+      }
+    }
+
   });
+
+export const STRIPE_BILLING_ENV_KEYS = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_PRICE_SOLO_MONTHLY",
+  "STRIPE_PRICE_SOLO_ANNUAL",
+  "STRIPE_PRICE_TEAM_MONTHLY",
+  "STRIPE_PRICE_TEAM_ANNUAL",
+  "STRIPE_PRICE_SCALE_MONTHLY",
+  "STRIPE_PRICE_SCALE_ANNUAL",
+] as const;
+
+type StripeBillingEnv = Partial<
+  Record<(typeof STRIPE_BILLING_ENV_KEYS)[number], string | undefined>
+>;
+
+export function getMissingStripeBillingVars(config: StripeBillingEnv): string[] {
+  const configuredCount = STRIPE_BILLING_ENV_KEYS.filter((key) =>
+    Boolean(config[key]),
+  ).length;
+
+  if (configuredCount === 0 || configuredCount === STRIPE_BILLING_ENV_KEYS.length) {
+    return [];
+  }
+
+  return STRIPE_BILLING_ENV_KEYS.filter((key) => !config[key]);
+}
+
+export function isStripeBillingConfigured(config: StripeBillingEnv): boolean {
+  return STRIPE_BILLING_ENV_KEYS.every((key) => Boolean(config[key]));
+}
 
 /**
  * Validated environment variables. Uses lazy initialization so the schema
@@ -227,7 +344,14 @@ export const env = new Proxy({} as z.infer<typeof envSchema>, {
 
     // Parse once on first access, then cache for all subsequent reads
     if (!(globalThis as Record<string, unknown>).__env) {
-      const result = envSchema.safeParse(process.env);
+      // Railway preview environments can inherit a DATABASE_URL whose service
+      // reference has an empty hostname. Migration and seed commands already
+      // recover from this using the individual PG/proxy variables; normalize
+      // the runtime value the same way before validating the complete config.
+      const result = envSchema.safeParse({
+        ...process.env,
+        DATABASE_URL: resolveDatabaseUrl(process.env),
+      });
       if (!result.success) {
         const missing = result.error.issues
           .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
@@ -237,7 +361,7 @@ export const env = new Proxy({} as z.infer<typeof envSchema>, {
             `Ensure these variables are set in your Railway service (Settings → Variables).\n` +
             `Required: DATABASE_URL, BETTER_AUTH_SECRET, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET\n` +
             `Required when not on Railway: BETTER_AUTH_URL (or generate a Railway domain)\n` +
-            `Optional: BETTER_AUTH_TRUSTED_ORIGINS, S3_REGION (default: us-east-1), S3_FORCE_PATH_STYLE (default: true), TRUSTED_PROXY_IP, DEMO_ORG_SLUG, RESEND_API_KEY, RESEND_FROM_EMAIL, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SMTP_SECURE, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_DISCOVERY_URL, OIDC_PROVIDER_NAME, AUTH_GOOGLE_CLIENT_ID, AUTH_GOOGLE_CLIENT_SECRET, AUTH_GITHUB_CLIENT_ID, AUTH_GITHUB_CLIENT_SECRET, AUTH_MICROSOFT_CLIENT_ID, AUTH_MICROSOFT_CLIENT_SECRET, AUTH_MICROSOFT_TENANT_ID\n`,
+            `Optional: BETTER_AUTH_TRUSTED_ORIGINS, S3_REGION (default: us-east-1), S3_FORCE_PATH_STYLE (default: true), TRUSTED_PROXY_IP, DEMO_ORG_SLUG, RESEND_API_KEY, RESEND_RECEIVING_API_KEY, RESEND_FROM_EMAIL, RESEND_CANDIDATE_FROM_EMAIL, RESEND_REPLY_DOMAIN, RESEND_WEBHOOK_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SMTP_SECURE, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_DISCOVERY_URL, OIDC_PROVIDER_NAME, AUTH_GOOGLE_CLIENT_ID, AUTH_GOOGLE_CLIENT_SECRET, AUTH_GITHUB_CLIENT_ID, AUTH_GITHUB_CLIENT_SECRET, AUTH_MICROSOFT_CLIENT_ID, AUTH_MICROSOFT_CLIENT_SECRET, AUTH_MICROSOFT_TENANT_ID\n`,
         );
         throw result.error;
       }

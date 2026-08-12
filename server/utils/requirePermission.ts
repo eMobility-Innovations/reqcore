@@ -61,6 +61,8 @@ export async function requirePermission(
     throw createError({ statusCode: 403, statusMessage: 'No active organization' })
   }
 
+  await assertDemoAccountCanUseOrg(session.user.email, activeOrganizationId)
+
   // ── Step 3: Permission check (Better Auth AC) ──
   // Type assertion needed because the organization plugin dynamically
   // extends auth.api with hasPermission, which TypeScript can't infer

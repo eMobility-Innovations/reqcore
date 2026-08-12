@@ -1,6 +1,7 @@
 import { eq, and } from 'drizzle-orm'
+import { z } from 'zod'
 import { fileTypeFromBuffer } from 'file-type'
-import { candidate, document } from '../../../../database/schema'
+import { document } from '../../../../database/schema'
 import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE,
@@ -10,6 +11,7 @@ import {
   sanitizeFilename,
 } from '../../../../utils/schemas/document'
 import { parseDocument } from '../../../../utils/resume-parser'
+import { findActiveCandidate } from '../../../../utils/candidate-retention'
 
 /**
  * POST /api/candidates/:id/documents
@@ -35,21 +37,12 @@ export default defineEventHandler(async (event) => {
   // 1. Validate candidate exists and belongs to this org
   // ─────────────────────────────────────────────
 
-  const candidateId = getRouterParam(event, 'id')
-  if (!candidateId) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing candidate ID' })
-  }
+  const { id: candidateId } = await getValidatedRouterParams(event, z.object({ id: z.string().uuid() }).parse)
 
-  const existingCandidate = await db.query.candidate.findFirst({
-    where: and(
-      eq(candidate.id, candidateId),
-      eq(candidate.organizationId, orgId),
-    ),
-    columns: { id: true },
-  })
+  const existingCandidate = await findActiveCandidate(orgId, candidateId)
 
   if (!existingCandidate) {
-    throw createError({ statusCode: 404, statusMessage: 'Candidate not found' })
+    throw createError({ statusCode: 409, statusMessage: 'Candidate is quarantined or not found' })
   }
 
   // ─────────────────────────────────────────────

@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { generateCriteriaFromDescription } from '../../utils/ai/scoring'
-import type { SupportedProvider } from '../../utils/ai/provider'
-import { loadAiConfig } from '../../utils/ai/loadConfig'
+import { resolveAnalysisProvider } from '../../utils/ai/resolveProvider'
 import { createRateLimiter } from '../../utils/rateLimit'
 
 const bodySchema = z.object({
@@ -29,16 +28,10 @@ export default defineEventHandler(async (event) => {
   const orgId = session.session.activeOrganizationId
   const body = await readValidatedBody(event, bodySchema.parse)
 
-  const config = await loadAiConfig(orgId, { purpose: 'analysis', preferId: body.aiConfigId })
+  const resolved = await resolveAnalysisProvider(orgId, { preferId: body.aiConfigId })
 
   const criteria = await generateCriteriaFromDescription(
-    {
-      provider: config.provider as SupportedProvider,
-      model: config.model,
-      apiKeyEncrypted: config.apiKeyEncrypted,
-      baseUrl: config.baseUrl,
-      maxTokens: config.maxTokens,
-    },
+    resolved.providerConfig,
     body.title,
     body.description,
   )

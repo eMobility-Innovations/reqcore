@@ -1,5 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { aiConfig } from '../../database/schema'
+import {
+  canUsePlatformAi,
+  getPlatformAiOverride,
+  toPlatformAiConfigListRow,
+} from '../../utils/ai/platformConfig'
 
 /**
  * GET /api/ai-config
@@ -32,10 +37,26 @@ export default defineEventHandler(async (event) => {
     orderBy: (t, { desc }) => [desc(t.isDefaultChatbot), desc(t.isDefaultAnalysis), desc(t.createdAt)],
   })
 
-  return rows.map(({ apiKeyEncrypted, ...rest }) => ({
+  const mapped = rows.map(({ apiKeyEncrypted, ...rest }) => ({
     ...rest,
     inputPricePer1m: rest.inputPricePer1m != null ? Number(rest.inputPricePer1m) : null,
     outputPricePer1m: rest.outputPricePer1m != null ? Number(rest.outputPricePer1m) : null,
     hasApiKey: Boolean(apiKeyEncrypted),
+    source: 'byok',
   }))
+
+  // The platform ("company") OpenRouter engine is always listed so it can be
+  // toggled on or off — it is never removed. Grandfathered orgs are the sole
+  // exception: their free access is explicitly BYOK-only, so they never see it.
+  if (await canUsePlatformAi(orgId)) {
+    const platformOverride = await getPlatformAiOverride(orgId)
+    const anyByokAnalysisDefault = mapped.some(c => c.isDefaultAnalysis)
+    mapped.push(
+      toPlatformAiConfigListRow(platformOverride, {
+        isDefaultAnalysisFallback: !anyByokAnalysisDefault,
+      }),
+    )
+  }
+
+  return mapped
 })

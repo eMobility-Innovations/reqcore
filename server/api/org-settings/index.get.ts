@@ -10,6 +10,13 @@ export default defineEventHandler(async (event) => {
     columns: {
       nameDisplayFormat: true,
       dateFormat: true,
+      retentionEnabled: true,
+      retentionMonths: true,
+      quarantineDays: true,
+      retentionActivatedAt: true,
+      privacyPolicyUrl: true,
+      privacyPolicyText: true,
+      privacyContactEmail: true,
     },
   })
 
@@ -17,5 +24,12 @@ export default defineEventHandler(async (event) => {
   return {
     nameDisplayFormat: settings?.nameDisplayFormat ?? 'first_last',
     dateFormat: settings?.dateFormat ?? 'mdy',
+    retentionEnabled: settings?.retentionEnabled ?? false,
+    retentionMonths: settings?.retentionMonths ?? 24,
+    quarantineDays: settings?.quarantineDays ?? 30,
+    retentionActivatedAt: settings?.retentionActivatedAt ?? null,
+    privacyPolicyUrl: settings?.privacyPolicyUrl ?? null,
+    privacyPolicyText: settings?.privacyPolicyText ?? null,
+    privacyContactEmail: settings?.privacyContactEmail ?? null,
   }
 })

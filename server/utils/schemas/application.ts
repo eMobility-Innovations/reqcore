@@ -27,6 +27,12 @@ export const applicationQuerySchema = z.object({
   jobId: z.string().min(1).optional(),
   candidateId: z.string().min(1).optional(),
   status: z.enum(['new', 'screening', 'interview', 'offer', 'hired', 'rejected']).optional(),
+  search: z.string().trim().max(200).optional(),
+  score: z.enum(['high', 'medium', 'low', 'none']).optional(),
+  interview: z.enum(['has-interview', 'no-interview']).optional(),
+  sort: z.enum(['date-desc', 'date-asc', 'name-asc', 'name-desc', 'score-desc', 'score-asc', 'updated-desc']).default('date-desc'),
+  /** JSON-encoded array of { propertyDefinitionId, op, value } filters */
+  propertyFilters: z.string().optional(),
 })
 
 /** Reusable schema for `:id` route params */

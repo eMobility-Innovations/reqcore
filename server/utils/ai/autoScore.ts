@@ -1,34 +1,47 @@
 /**
  * Fire-and-forget AI scoring for a single application.
  * Called when autoScoreOnApply is enabled on a job.
- * Silently skips if AI config, criteria, or resume are missing.
+ * Silently skips if AI config, criteria, or candidate material are missing.
  */
 import { eq, and } from 'drizzle-orm'
 import {
   application, scoringCriterion, criterionScore,
   analysisRun, document,
 } from '../../database/schema'
-import { scoreApplication, computeCompositeScore } from './scoring'
+import { scoreApplication, computeCompositeScore, hasScorableCandidateMaterial } from './scoring'
 import type { CriterionDefinition } from './scoring'
-import type { SupportedProvider } from './provider'
-import { loadAiConfig } from './loadConfig'
+import { resolveAnalysisProvider } from './resolveProvider'
+import { assertPlatformBudget } from './budget'
+import { computeCostUsdMicros } from './pricing'
+import { captureAiGeneration } from './observability'
 import { extractResumeText } from '../resume-parser'
+import { fetchScreeningAnswers, DEFAULT_ANALYSIS_CONTEXT } from './analysisContext'
 
 export async function autoScoreApplication(applicationId: string, orgId: string) {
   const app = await db.query.application.findFirst({
     where: and(eq(application.id, applicationId), eq(application.organizationId, orgId)),
     with: {
       candidate: { columns: { id: true, firstName: true, lastName: true } },
-      job: { columns: { id: true, title: true, description: true } },
+      job: { columns: { id: true, title: true, description: true, analysisContext: true } },
     },
   })
   if (!app) return
 
-  let config
+  let resolved
   try {
-    config = await loadAiConfig(orgId, { purpose: 'analysis' })
+    resolved = await resolveAnalysisProvider(orgId)
   } catch {
     return
+  }
+
+  // Money-safety gate. Auto-scoring is fire-and-forget, so a budget breach just
+  // silently skips — the user isn't waiting on a response. Only platform-paid.
+  if (resolved.billingMode === 'platform') {
+    try {
+      await assertPlatformBudget(orgId)
+    } catch {
+      return
+    }
   }
 
   const criteria = await db.select().from(scoringCriterion)
@@ -44,7 +57,6 @@ export async function autoScoreApplication(applicationId: string, orgId: string)
 
   const resumeDoc = docs.find(d => d.type === 'resume')
   const resumeText = extractResumeText(resumeDoc?.parsedContent)
-  if (!resumeText) return
 
   if (!app.job.description) return
 
@@ -57,38 +69,51 @@ export async function autoScoreApplication(applicationId: string, orgId: string)
     weight: c.weight,
   }))
 
-  const providerConfig = {
-    provider: config.provider as SupportedProvider,
-    model: config.model,
-    apiKeyEncrypted: config.apiKeyEncrypted,
-    baseUrl: config.baseUrl,
-    maxTokens: config.maxTokens,
+  const analysisContext = app.job.analysisContext ?? DEFAULT_ANALYSIS_CONTEXT
+  const screeningAnswers = analysisContext.screeningAnswers
+    ? await fetchScreeningAnswers(applicationId, orgId)
+    : null
+  const materials = {
+    resumeText,
+    coverLetterText: analysisContext.coverLetter ? app.coverLetterText : null,
+    applicationNotes: analysisContext.recruiterNotes ? app.notes : null,
+    screeningAnswers,
   }
+  if (!hasScorableCandidateMaterial(materials)) return
 
+  const startedAt = Date.now()
   let result
   try {
-    result = await scoreApplication(providerConfig, {
+    result = await scoreApplication(resolved.providerConfig, {
       jobTitle: app.job.title,
       jobDescription: app.job.description,
       criteria: criteriaDefinitions,
-      resumeText,
-      coverLetterText: app.coverLetterText,
-      applicationNotes: app.notes,
+      ...materials,
     })
   } catch (err: any) {
     await db.insert(analysisRun).values({
       organizationId: orgId,
       applicationId,
       status: 'failed',
-      provider: config.provider,
-      model: config.model,
+      provider: resolved.provider,
+      model: resolved.model,
+      billingMode: resolved.billingMode,
       criteriaSnapshot: criteriaDefinitions as any,
       errorMessage: err?.message ?? 'Unknown error',
+    })
+    captureAiGeneration({
+      orgId, applicationId, feature: 'application_analysis',
+      provider: resolved.provider, model: resolved.model, billingMode: resolved.billingMode,
+      promptTokens: 0, completionTokens: 0, costUsdMicros: null,
+      latencyMs: Date.now() - startedAt, status: 'failed',
     })
     return
   }
 
   const compositeScore = computeCompositeScore(criteriaDefinitions, result.scoring.evaluations)
+  const costUsdMicros = computeCostUsdMicros(
+    resolved.model, result.usage.promptTokens, result.usage.completionTokens,
+  )
 
   const scoreValues = result.scoring.evaluations.map(evaluation => ({
     organizationId: orgId,
@@ -102,7 +127,7 @@ export async function autoScoreApplication(applicationId: string, orgId: string)
     gaps: evaluation.gaps,
   }))
 
-  await db.transaction(async (tx) => {
+  const [run] = await db.transaction(async (tx) => {
     await tx.delete(criterionScore)
       .where(and(
         eq(criterionScore.applicationId, applicationId),
@@ -117,16 +142,26 @@ export async function autoScoreApplication(applicationId: string, orgId: string)
       .set({ score: compositeScore, updatedAt: new Date() })
       .where(eq(application.id, applicationId))
 
-    await tx.insert(analysisRun).values({
+    return tx.insert(analysisRun).values({
       organizationId: orgId,
       applicationId,
       status: 'completed',
-      provider: config.provider,
-      model: config.model,
+      provider: resolved.provider,
+      model: resolved.model,
+      billingMode: resolved.billingMode,
       criteriaSnapshot: criteriaDefinitions as any,
       compositeScore,
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
-    })
+      costUsdMicros,
+    }).returning({ id: analysisRun.id })
+  })
+
+  captureAiGeneration({
+    orgId, applicationId, feature: 'application_analysis',
+    provider: resolved.provider, model: resolved.model, billingMode: resolved.billingMode,
+    promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens,
+    costUsdMicros, latencyMs: Date.now() - startedAt, status: 'completed',
+    traceId: run?.id,
   })
 }

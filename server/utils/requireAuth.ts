@@ -29,6 +29,8 @@ export async function requireAuth(event: H3Event) {
     throw createError({ statusCode: 403, statusMessage: 'No active organization' })
   }
 
+  await assertDemoAccountCanUseOrg(session.user.email, activeOrganizationId)
+
   return {
     ...session,
     session: {

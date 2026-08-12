@@ -27,14 +27,51 @@ export const questionTypeEnum = pgEnum('question_type', [
   'short_text', 'long_text', 'single_select', 'multi_select',
   'number', 'date', 'url', 'checkbox', 'file_upload',
 ])
+export const propertyEntityTypeEnum = pgEnum('property_entity_type', ['candidate', 'application'])
+export const propertyTypeEnum = pgEnum('property_type', [
+  'text', 'long_text', 'number', 'select', 'multi_select',
+  'date', 'checkbox', 'url', 'email', 'person', 'file',
+])
 export const genderEnum = pgEnum('gender', ['male', 'female', 'other', 'prefer_not_to_say'])
 export const experienceLevelEnum = pgEnum('experience_level', ['junior', 'mid', 'senior', 'lead'])
 export const nameDisplayFormatEnum = pgEnum('name_display_format', ['first_last', 'last_first'])
 export const dateFormatEnum = pgEnum('date_format', ['mdy', 'dmy', 'ymd'])
+export const candidateMessageDirectionEnum = pgEnum('candidate_message_direction', ['inbound', 'outbound'])
+export const candidateMessageStatusEnum = pgEnum('candidate_message_status', [
+  'queued', 'sent', 'delivered', 'delayed', 'bounced', 'failed', 'complained',
+])
 
 // ─────────────────────────────────────────────
 // ATS Domain Tables — ALL scoped by organizationId
 // ─────────────────────────────────────────────
+
+/**
+ * Post-signup onboarding survey answers for an account.
+ *
+ * One row per user. Answers are nullable because each question is skippable.
+ * `organizationId` captures the active organization created during onboarding,
+ * while `userId` is the durable account link for user-level analysis.
+ */
+export const onboardingSurveyResponse = pgTable('onboarding_survey_response', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  signupPlan: text('signup_plan'),
+  signupBilling: text('signup_billing'),
+  companySize: text('company_size'),
+  userRole: text('user_role'),
+  discoverySource: text('discovery_source'),
+  currentHiringProcess: text('current_hiring_process'),
+  expectedRoles12m: text('expected_roles_12m'),
+  answeredCount: integer('answered_count').notNull().default(0),
+  skippedCount: integer('skipped_count').notNull().default(0),
+  completedAt: timestamp('completed_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  uniqueIndex('onboarding_survey_response_user_id_idx').on(t.userId),
+  index('onboarding_survey_response_organization_id_idx').on(t.organizationId),
+]))
 
 /**
  * Jobs / Positions within an organization.
@@ -59,10 +96,20 @@ export const job = pgTable('job', {
   /** Experience level required for this role */
   experienceLevel: experienceLevelEnum('experience_level'),
   // ── Application form settings ──
+  phoneRequirement: text('phone_requirement').$type<'hidden' | 'optional' | 'required'>().notNull().default('optional'),
   requireResume: boolean('require_resume').notNull().default(false),
   requireCoverLetter: boolean('require_cover_letter').notNull().default(false),
   // ── AI scoring settings ──
   autoScoreOnApply: boolean('auto_score_on_apply').notNull().default(false),
+  /**
+   * Which optional candidate data sources the AI analysis reads. A resume is
+   * always included when present, but another enabled source is sufficient.
+   */
+  analysisContext: jsonb('analysis_context').$type<{
+    coverLetter: boolean
+    screeningAnswers: boolean
+    recruiterNotes: boolean
+  }>().notNull().default({ coverLetter: true, screeningAnswers: true, recruiterNotes: false }),
   // ── Timestamps ──
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -88,12 +135,30 @@ export const candidate = pgTable('candidate', {
   dateOfBirth: text('date_of_birth'),
   /** Quick notes visible inline on the candidates list */
   quickNotes: text('quick_notes'),
+  // ── GDPR retention / erasure lifecycle ──
+  /** When set and in the future, this candidate is exempt from automated retention deletion */
+  retentionExemptUntil: timestamp('retention_exempt_until'),
+  /** Documented justification for the exemption (legal hold, active dispute, etc.) */
+  retentionExemptReason: text('retention_exempt_reason'),
+  /**
+   * When an admin last manually reviewed/restored this candidate. Acts as a
+   * fresh retention anchor: restoring from quarantine sets this to now so the
+   * candidate gets a full retention window again instead of being re-quarantined
+   * on the next sweep. NULL = never manually reviewed.
+   */
+  retentionReviewedAt: timestamp('retention_reviewed_at'),
+  /** When the candidate entered the recoverable quarantine window. NULL = not quarantined. */
+  quarantinedAt: timestamp('quarantined_at'),
+  /** When a quarantined candidate becomes eligible for permanent erasure */
+  scheduledPurgeAt: timestamp('scheduled_purge_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ([
   index('candidate_organization_id_idx').on(t.organizationId),
   index('candidate_gender_idx').on(t.organizationId, t.gender),
   uniqueIndex('candidate_org_email_idx').on(t.organizationId, t.email),
+  // Drives the retention cron's quarantine → purge sweep efficiently.
+  index('candidate_quarantine_idx').on(t.organizationId, t.scheduledPurgeAt),
 ]))
 
 /**
@@ -183,6 +248,69 @@ export const questionResponse = pgTable('question_response', {
 ]))
 
 // ─────────────────────────────────────────────
+// Custom Properties (Notion-style "database properties")
+// ─────────────────────────────────────────────
+//
+// Two-table design:
+//   - propertyDefinition: schema. Org-global when jobId IS NULL; per-job otherwise.
+//                         entityType=candidate is always org-global (jobId must be NULL).
+//                         entityType=application can be org-global OR per-job.
+//   - propertyValue:      values, polymorphic to candidate.id or application.id.
+//
+// `value` is jsonb shaped by the property type:
+//   text/long_text/url/email/person → string
+//   number                          → number
+//   select                          → string (one option id)
+//   multi_select                    → string[] (option ids)
+//   date                            → string (ISO YYYY-MM-DD)
+//   checkbox                        → boolean
+//   file                            → { documentId: string }
+//
+// `config` jsonb:
+//   select / multi_select → { options: [{ id, label, color }] }
+//   number                → { format?: 'plain' | 'percent' | 'currency', currency?: string }
+//   others                → null
+//
+// Per-job overrides are NOT supported (additive only): per-job props are merged
+// after org-global ones, ordered by displayOrder.
+
+export const propertyDefinition = pgTable('property_definition', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  /** NULL = org-global. Non-null = per-job (only valid when entityType='application'). */
+  jobId: text('job_id').references(() => job.id, { onDelete: 'cascade' }),
+  entityType: propertyEntityTypeEnum('entity_type').notNull(),
+  type: propertyTypeEnum('type').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  displayOrder: integer('display_order').notNull().default(0),
+  config: jsonb('config').$type<Record<string, unknown> | null>(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  index('property_definition_org_idx').on(t.organizationId),
+  index('property_definition_org_entity_idx').on(t.organizationId, t.entityType),
+  index('property_definition_job_idx').on(t.jobId),
+]))
+
+export const propertyValue = pgTable('property_value', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  propertyDefinitionId: text('property_definition_id').notNull().references(() => propertyDefinition.id, { onDelete: 'cascade' }),
+  entityType: propertyEntityTypeEnum('entity_type').notNull(),
+  /** candidate.id when entityType='candidate', application.id when 'application' */
+  entityId: text('entity_id').notNull(),
+  value: jsonb('value'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  index('property_value_org_idx').on(t.organizationId),
+  index('property_value_entity_idx').on(t.entityType, t.entityId),
+  index('property_value_definition_idx').on(t.propertyDefinitionId),
+  uniqueIndex('property_value_def_entity_idx').on(t.propertyDefinitionId, t.entityId),
+]))
+
+// ─────────────────────────────────────────────
 // Organization Localization Settings
 // ─────────────────────────────────────────────
 
@@ -198,10 +326,60 @@ export const orgSettings = pgTable('org_settings', {
   nameDisplayFormat: nameDisplayFormatEnum('name_display_format').notNull().default('first_last'),
   /** Controls the date display format across the app */
   dateFormat: dateFormatEnum('date_format').notNull().default('mdy'),
+  // ── GDPR retention policy ──
+  /** Master switch — when false, no automated retention deletion runs for this org */
+  retentionEnabled: boolean('retention_enabled').notNull().default(false),
+  /** Months of inactivity (since latest recruitment process ends) before erasure */
+  retentionMonths: integer('retention_months').notNull().default(24),
+  /** Days a candidate stays recoverable in quarantine before permanent erasure */
+  quarantineDays: integer('quarantine_days').notNull().default(30),
+  /** First time retention was enabled — anchors the review window so existing data
+   *  is never deleted immediately. NULL until the org first enables retention. */
+  retentionActivatedAt: timestamp('retention_activated_at'),
+  // ── Application-form privacy notice (org-configurable) ──
+  privacyPolicyUrl: text('privacy_policy_url'),
+  privacyPolicyText: text('privacy_policy_text'),
+  privacyContactEmail: text('privacy_contact_email'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ([
   uniqueIndex('org_settings_organization_id_idx').on(t.organizationId),
+]))
+
+// ─────────────────────────────────────────────
+// GDPR Retention Audit
+// ─────────────────────────────────────────────
+
+export const retentionAuditActionEnum = pgEnum('retention_audit_action', [
+  'quarantined', 'restored', 'erased', 'exempted', 'unexempted', 'exported',
+])
+
+/**
+ * Privacy-safe audit trail for retention & erasure actions.
+ *
+ * Deliberately stores NO personal data — no names, emails, filenames, resume
+ * content, or storage keys. `candidateId` is an opaque UUID kept as proof that a
+ * specific record was handled; it is not personal data once the candidate is gone.
+ * Lives in its own table (not `activity_log`) so it survives candidate erasure,
+ * which deletes the candidate's `activity_log` rows.
+ */
+export const retentionAudit = pgTable('retention_audit', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  /** Opaque candidate UUID — intentionally NOT a foreign key so it outlives erasure. */
+  candidateId: text('candidate_id').notNull(),
+  action: retentionAuditActionEnum('action').notNull(),
+  /** Outcome marker: 'success' | 'partial' | 'failed' | 'dry_run'. */
+  result: text('result').notNull().default('success'),
+  /** Triggering user id, or null for scheduled cron runs. Opaque id, not PII. */
+  actorId: text('actor_id'),
+  /** Non-PII counts only (e.g. { documents: 2, comments: 1, s3Failures: 0 }). */
+  metadata: jsonb('metadata').$type<Record<string, number | string>>(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ([
+  index('retention_audit_organization_id_idx').on(t.organizationId),
+  index('retention_audit_candidate_id_idx').on(t.candidateId),
+  index('retention_audit_created_at_idx').on(t.createdAt),
 ]))
 
 // ─────────────────────────────────────────────
@@ -326,6 +504,8 @@ export const interview = pgTable('interview', {
   duration: integer('duration').notNull().default(60),
   location: text('location'),
   notes: text('notes'),
+  /** Optional recruiter-written note included in candidate-facing proposals. */
+  personalNote: text('personal_note'),
   interviewers: jsonb('interviewers').$type<string[]>(),
   createdById: text('created_by_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   invitationSentAt: timestamp('invitation_sent_at'),
@@ -370,6 +550,97 @@ export const emailTemplate = pgTable('email_template', {
   index('email_template_created_by_id_idx').on(t.createdById),
 ]))
 
+// ─────────────────────────────────────────────
+// Candidate Messaging
+// ─────────────────────────────────────────────
+
+/** One email thread per application, routed through an unguessable reply token. */
+export const candidateConversation = pgTable('candidate_conversation', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  applicationId: text('application_id').notNull().references(() => application.id, { onDelete: 'cascade' }),
+  replyToken: text('reply_token').notNull().$defaultFn(() => crypto.randomUUID().replaceAll('-', '')),
+  unreadCount: integer('unread_count').notNull().default(0),
+  lastMessageAt: timestamp('last_message_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  index('candidate_conversation_organization_id_idx').on(t.organizationId),
+  uniqueIndex('candidate_conversation_application_id_idx').on(t.applicationId),
+  uniqueIndex('candidate_conversation_reply_token_idx').on(t.replyToken),
+  index('candidate_conversation_last_message_at_idx').on(t.organizationId, t.lastMessageAt),
+]))
+
+/** Durable email content plus provider and RFC threading identities. */
+export const candidateMessage = pgTable('candidate_message', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  conversationId: text('conversation_id').notNull().references(() => candidateConversation.id, { onDelete: 'cascade' }),
+  direction: candidateMessageDirectionEnum('direction').notNull(),
+  status: candidateMessageStatusEnum('status').notNull(),
+  fromEmail: text('from_email').notNull(),
+  toEmail: text('to_email').notNull(),
+  subject: text('subject').notNull(),
+  bodyText: text('body_text').notNull(),
+  /** Distinguishes ordinary replies from interview lifecycle messages. */
+  kind: text('kind').$type<'message' | 'interview_proposal' | 'interview_update' | 'interview_cancellation' | 'interview_response'>().notNull().default('message'),
+  interviewId: text('interview_id').references(() => interview.id, { onDelete: 'set null' }),
+  /** ICS generation/delivery is tracked independently from provider delivery. */
+  calendarAttachmentStatus: text('calendar_attachment_status').$type<'not_applicable' | 'attached' | 'failed'>().notNull().default('not_applicable'),
+  calendarAttachmentError: text('calendar_attachment_error'),
+  calendarSequence: integer('calendar_sequence'),
+  providerMessageId: text('provider_message_id'),
+  internetMessageId: text('internet_message_id'),
+  inReplyTo: text('in_reply_to'),
+  references: jsonb('references').$type<string[]>(),
+  sentById: text('sent_by_id').references(() => user.id, { onDelete: 'set null' }),
+  providerStatusAt: timestamp('provider_status_at'),
+  sentAt: timestamp('sent_at'),
+  deliveredAt: timestamp('delivered_at'),
+  failedAt: timestamp('failed_at'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  index('candidate_message_organization_id_idx').on(t.organizationId),
+  index('candidate_message_conversation_id_idx').on(t.conversationId, t.createdAt),
+  index('candidate_message_interview_id_idx').on(t.interviewId, t.createdAt),
+  uniqueIndex('candidate_message_provider_id_idx').on(t.providerMessageId),
+  uniqueIndex('candidate_message_internet_id_idx').on(t.internetMessageId),
+]))
+
+/** File metadata for message attachments. Raw bytes live in S3/MinIO. */
+export const candidateMessageAttachment = pgTable('candidate_message_attachment', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  messageId: text('message_id').notNull().references(() => candidateMessage.id, { onDelete: 'cascade' }),
+  storageKey: text('storage_key').notNull().unique(),
+  filename: text('filename').notNull(),
+  mimeType: text('mime_type').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  /** Resend attachment identity for replay-safe inbound webhook processing. */
+  providerAttachmentId: text('provider_attachment_id').unique(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ([
+  index('candidate_message_attachment_organization_id_idx').on(t.organizationId),
+  index('candidate_message_attachment_message_id_idx').on(t.messageId),
+]))
+
+/** Resend delivers webhooks at least once; this table makes processing replay-safe. */
+export const candidateMessageWebhookEvent = pgTable('candidate_message_webhook_event', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  providerMessageId: text('provider_message_id'),
+  occurredAt: timestamp('occurred_at').notNull(),
+  processedAt: timestamp('processed_at'),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ([
+  index('candidate_message_webhook_provider_id_idx').on(t.providerMessageId),
+  index('candidate_message_webhook_unprocessed_idx').on(t.processedAt),
+]))
+
 export const commentTargetEnum = pgEnum('comment_target', ['candidate', 'application', 'job'])
 
 /**
@@ -411,6 +682,11 @@ export const criterionCategoryEnum = pgEnum('criterion_category', [
 
 export const analysisRunStatusEnum = pgEnum('analysis_run_status', [
   'completed', 'failed', 'partial',
+])
+
+/** Who pays for an analysis run — see analysisRun.billingMode. */
+export const analysisBillingModeEnum = pgEnum('analysis_billing_mode', [
+  'platform', 'byok',
 ])
 
 /**
@@ -557,6 +833,28 @@ export const aiConfig = pgTable('ai_config', {
 ]))
 
 /**
+ * Per-organization overrides for the platform-paid OpenRouter fallback.
+ * This deliberately does not store an API key: the key remains server-owned,
+ * so analysis runs through this config stay `billingMode = platform`.
+ */
+export const platformAiConfig = pgTable('platform_ai_config', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  name: text('name').notNull().default('Platform (OpenRouter)'),
+  provider: text('provider').notNull().default('openrouter'),
+  model: text('model').notNull().default('openai/gpt-5.4-mini'),
+  maxTokens: integer('max_tokens').notNull().default(4096),
+  inputPricePer1m: numeric('input_price_per_1m', { precision: 10, scale: 4 }),
+  outputPricePer1m: numeric('output_price_per_1m', { precision: 10, scale: 4 }),
+  isDefaultAnalysis: boolean('is_default_analysis').notNull().default(true),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  uniqueIndex('platform_ai_config_organization_id_idx').on(t.organizationId),
+]))
+
+/**
  * Per-job scoring criteria. Each criterion defines one dimension of evaluation.
  * Weights are user-adjustable via sliders and used to compute weighted composite scores.
  */
@@ -622,6 +920,18 @@ export const analysisRun = pgTable('analysis_run', {
   /** Token usage for cost tracking */
   promptTokens: integer('prompt_tokens'),
   completionTokens: integer('completion_tokens'),
+  /**
+   * Frozen cost of this run in micro-dollars (1e-6 USD), computed at write time
+   * from the central price table (utils/ai/pricing.ts). Null when the model is
+   * unpriced. Summed by the budget gate; never recomputed from mutable config.
+   */
+  costUsdMicros: integer('cost_usd_micros'),
+  /**
+   * Who pays for this run: `platform` = our OpenRouter key (counts against the
+   * org's monthly budget + the global daily kill-switch); `byok` = the org's own
+   * API key (never budget-capped — it's their bill, we only track it).
+   */
+  billingMode: analysisBillingModeEnum('billing_mode').notNull().default('byok'),
   /** Raw LLM response for debugging (sanitized — no PII stored) */
   rawResponse: jsonb('raw_response'),
   errorMessage: text('error_message'),
@@ -636,6 +946,11 @@ export const analysisRun = pgTable('analysis_run', {
 // ─────────────────────────────────────────────
 // Relations
 // ─────────────────────────────────────────────
+
+export const onboardingSurveyResponseRelations = relations(onboardingSurveyResponse, ({ one }) => ({
+  user: one(user, { fields: [onboardingSurveyResponse.userId], references: [user.id] }),
+  organization: one(organization, { fields: [onboardingSurveyResponse.organizationId], references: [organization.id] }),
+}))
 
 export const jobRelations = relations(job, ({ one, many }) => ({
   organization: one(organization, { fields: [job.organizationId], references: [organization.id] }),
@@ -660,6 +975,7 @@ export const applicationRelations = relations(application, ({ one, many }) => ({
   criterionScores: many(criterionScore),
   analysisRuns: many(analysisRun),
   source: one(applicationSource),
+  conversation: one(candidateConversation),
 }))
 
 export const documentRelations = relations(document, ({ one }) => ({
@@ -676,6 +992,17 @@ export const questionResponseRelations = relations(questionResponse, ({ one }) =
   organization: one(organization, { fields: [questionResponse.organizationId], references: [organization.id] }),
   application: one(application, { fields: [questionResponse.applicationId], references: [application.id] }),
   question: one(jobQuestion, { fields: [questionResponse.questionId], references: [jobQuestion.id] }),
+}))
+
+export const propertyDefinitionRelations = relations(propertyDefinition, ({ one, many }) => ({
+  organization: one(organization, { fields: [propertyDefinition.organizationId], references: [organization.id] }),
+  job: one(job, { fields: [propertyDefinition.jobId], references: [job.id] }),
+  values: many(propertyValue),
+}))
+
+export const propertyValueRelations = relations(propertyValue, ({ one }) => ({
+  organization: one(organization, { fields: [propertyValue.organizationId], references: [organization.id] }),
+  definition: one(propertyDefinition, { fields: [propertyValue.propertyDefinitionId], references: [propertyDefinition.id] }),
 }))
 
 export const commentRelations = relations(comment, ({ one }) => ({
@@ -699,15 +1026,35 @@ export const joinRequestRelations = relations(joinRequest, ({ one }) => ({
   reviewedBy: one(user, { fields: [joinRequest.reviewedById], references: [user.id] }),
 }))
 
-export const interviewRelations = relations(interview, ({ one }) => ({
+export const interviewRelations = relations(interview, ({ one, many }) => ({
   organization: one(organization, { fields: [interview.organizationId], references: [organization.id] }),
   application: one(application, { fields: [interview.applicationId], references: [application.id] }),
   createdBy: one(user, { fields: [interview.createdById], references: [user.id] }),
+  messages: many(candidateMessage),
 }))
 
 export const emailTemplateRelations = relations(emailTemplate, ({ one }) => ({
   organization: one(organization, { fields: [emailTemplate.organizationId], references: [organization.id] }),
   createdBy: one(user, { fields: [emailTemplate.createdById], references: [user.id] }),
+}))
+
+export const candidateConversationRelations = relations(candidateConversation, ({ one, many }) => ({
+  organization: one(organization, { fields: [candidateConversation.organizationId], references: [organization.id] }),
+  application: one(application, { fields: [candidateConversation.applicationId], references: [application.id] }),
+  messages: many(candidateMessage),
+}))
+
+export const candidateMessageRelations = relations(candidateMessage, ({ one, many }) => ({
+  organization: one(organization, { fields: [candidateMessage.organizationId], references: [organization.id] }),
+  conversation: one(candidateConversation, { fields: [candidateMessage.conversationId], references: [candidateConversation.id] }),
+  sentBy: one(user, { fields: [candidateMessage.sentById], references: [user.id] }),
+  interview: one(interview, { fields: [candidateMessage.interviewId], references: [interview.id] }),
+  attachments: many(candidateMessageAttachment),
+}))
+
+export const candidateMessageAttachmentRelations = relations(candidateMessageAttachment, ({ one }) => ({
+  organization: one(organization, { fields: [candidateMessageAttachment.organizationId], references: [organization.id] }),
+  message: one(candidateMessage, { fields: [candidateMessageAttachment.messageId], references: [candidateMessage.id] }),
 }))
 
 export const calendarIntegrationRelations = relations(calendarIntegration, ({ one }) => ({
@@ -753,6 +1100,10 @@ export const applicationSourceRelations = relations(applicationSource, ({ one })
 
 export const orgSettingsRelations = relations(orgSettings, ({ one }) => ({
   organization: one(organization, { fields: [orgSettings.organizationId], references: [organization.id] }),
+}))
+
+export const retentionAuditRelations = relations(retentionAudit, ({ one }) => ({
+  organization: one(organization, { fields: [retentionAudit.organizationId], references: [organization.id] }),
 }))
 
 // ─────────────────────────────────────────────
@@ -886,4 +1237,67 @@ export const chatbotConversationRelations = relations(chatbotConversation, ({ on
 
 export const chatbotMessageRelations = relations(chatbotMessage, ({ one }) => ({
   conversation: one(chatbotConversation, { fields: [chatbotMessage.conversationId], references: [chatbotConversation.id] }),
+}))
+
+// ─────────────────────────────────────────────
+// Career Page
+// ─────────────────────────────────────────────
+
+/**
+ * Per-organization branded career page configuration.
+ *
+ * Customization is deliberately guardrailed: the org supplies identity only —
+ * its logo and name (already on `organization`), one accent color, an optional
+ * headline and short description, and an on/off switch. Reqcore owns the
+ * layout. No fonts, CSS, or layout controls are exposed. Custom domain is a
+ * later paid upgrade, not this table.
+ *
+ * One row per organization — upserted on first edit. Absence of a row means the
+ * org has never customized its page and defaults apply (accent = brand, headline
+ * derived from the org name). Every plan includes the `careerPage` feature, so
+ * the page is live unless the org has explicitly disabled it.
+ */
+export const careerPage = pgTable('career_page', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text('organization_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  /**
+   * Optional custom public slug for the /career/:slug URL. NULL falls back to the
+   * organization slug. Shares the /career namespace with organization slugs, so
+   * uniqueness is enforced across both on save.
+   */
+  slug: text('slug'),
+  /** Master switch — when false the public career page shows an "unavailable" state. */
+  enabled: boolean('enabled').notNull().default(true),
+  /** Single accent color as a hex string (e.g. "#4f46e5"). NULL falls back to the brand color. */
+  accentColor: text('accent_color'),
+  /** Optional hero headline. NULL -> "Open roles at {org name}". */
+  headline: text('headline'),
+  /** Optional short company intro shown under the headline. */
+  description: text('description'),
+  /**
+   * S3 storage key for a career-page-specific logo. NULL falls back to the
+   * organization logo. Served publicly via /api/public/career-page/:slug/asset.
+   */
+  logoStorageKey: text('logo_storage_key'),
+  /**
+   * S3 storage key for the hero banner image. NULL renders the plain accent
+   * hero. Served publicly via /api/public/career-page/:slug/asset.
+   */
+  bannerStorageKey: text('banner_storage_key'),
+  /**
+   * Vertical focal point for the hero banner, 0–100 (percent). Controls the CSS
+   * object-position so admins can reposition which slice of a wide image shows.
+   * 50 = centered (default).
+   */
+  bannerPosition: integer('banner_position').notNull().default(50),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ([
+  uniqueIndex('career_page_organization_id_idx').on(t.organizationId),
+  // Nullable unique: Postgres allows many NULLs, so orgs without a custom slug coexist.
+  uniqueIndex('career_page_slug_idx').on(t.slug),
+]))
+
+export const careerPageRelations = relations(careerPage, ({ one }) => ({
+  organization: one(organization, { fields: [careerPage.organizationId], references: [organization.id] }),
 }))

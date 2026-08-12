@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm'
 import { document } from '../../../database/schema'
-import { parseDocument } from '../../../utils/resume-parser'
+import { parseAndPersistDocument } from '../../../utils/document-parser'
 import { z } from 'zod'
 
 const paramsSchema = z.object({ id: z.string().min(1) })
@@ -40,11 +40,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Document not found' })
   }
 
-  // Download file from S3
-  const fileBuffer = await downloadFromS3(doc.storageKey)
-
-  // Parse document content
-  const parsedContent = await parseDocument(fileBuffer, doc.mimeType)
+  const parsedContent = await parseAndPersistDocument(doc)
 
   if (!parsedContent) {
     throw createError({
@@ -52,11 +48,6 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Failed to extract text from this document. The file may be image-based or corrupted.',
     })
   }
-
-  // Update the document record with parsed content
-  await db.update(document)
-    .set({ parsedContent: parsedContent as any })
-    .where(eq(document.id, documentId))
 
   return {
     id: doc.id,

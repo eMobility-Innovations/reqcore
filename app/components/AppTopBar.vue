@@ -5,9 +5,10 @@ import {
   Sun, Moon, MessageSquarePlus, Settings,
   ChevronDown, Menu, X, Users, ChevronLeft,
   LayoutDashboard, Calendar, ArrowUpCircle,
-  Cloud, Server, Sparkles, Radio, History,
-  MessageCircle,
+  Sparkles, Radio, History,
+  MessageCircle, Languages, Lock, Inbox,
 } from 'lucide-vue-next'
+import type { PlanFeature } from '~~/shared/billing'
 
 const route = useRoute()
 const localePath = useLocalePath()
@@ -19,22 +20,17 @@ const { isDark, toggle: toggleColorMode } = useColorMode()
 const showFeedbackModal = ref(false)
 const showUserMenu = ref(false)
 const showMobileMenu = ref(false)
-const showGetStartedMenu = ref(false)
+const showMoreNav = ref(false)
+const showDemoPlanMenu = ref(false)
 
 const config = useRuntimeConfig()
 const { activeOrg } = useCurrentOrg()
 
 const isDemo = computed(() => {
   const slug = config.public.demoOrgSlug
-  return slug && activeOrg.value?.slug === slug
+  return (slug && activeOrg.value?.slug === slug) || session.value?.user?.email === 'demo@reqcore.com'
 })
 
-const getStartedMenuRef = useTemplateRef<HTMLElement>('getStartedMenuRoot')
-function onClickOutsideGetStarted(e: MouseEvent) {
-  if (getStartedMenuRef.value && !getStartedMenuRef.value.contains(e.target as Node)) {
-    showGetStartedMenu.value = false
-  }
-}
 
 const userName = computed(() => session.value?.user?.name ?? 'User')
 const userEmail = computed(() => session.value?.user?.email ?? '')
@@ -112,7 +108,9 @@ const jobTabs = computed(() => {
   return [
     { label: 'Pipeline', to: base, icon: Kanban, exact: true },
     { label: 'Table', to: `${base}/candidates`, icon: Table2, exact: true },
+    { label: 'Inbox', to: `${base}/inbox`, icon: Inbox, exact: true },
     { label: 'Application Form', to: `${base}/application-form`, icon: FileText, exact: true },
+    { label: 'Source Tracking', to: `${base}/source-tracking`, icon: Radio, exact: true },
     { label: 'AI Analysis', to: `${base}/ai-analysis`, icon: Sparkles, exact: true },
     { label: 'Settings', to: `${base}/settings`, icon: Settings, exact: true },
   ]
@@ -122,17 +120,25 @@ const jobTabs = computed(() => {
 // Main navigation
 // ─────────────────────────────────────────────
 
-const mainNav: Array<{ label: string; to: string; icon: typeof Briefcase; exact: boolean; comingSoon?: boolean }> = [
+const mainNav: Array<{ label: string; to: string; icon: typeof Briefcase; exact: boolean; comingSoon?: boolean; feature?: PlanFeature }> = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard, exact: true },
   { label: 'Jobs', to: '/dashboard/jobs', icon: Briefcase, exact: false },
   { label: 'Candidates', to: '/dashboard/candidates', icon: Users, exact: false },
   { label: 'Applications', to: '/dashboard/applications', icon: FileText, exact: false },
+  { label: 'Inbox', to: '/dashboard/inbox', icon: Inbox, exact: true, feature: 'candidateMessaging' },
   { label: 'Interviews', to: '/dashboard/interviews', icon: Calendar, exact: false },
-  { label: 'Timeline', to: '/dashboard/timeline', icon: History, exact: true },
-  { label: 'Source Tracking', to: '/dashboard/source-tracking', icon: Radio, exact: true },
-  { label: 'AI Analysis', to: '/dashboard/ai-analysis', icon: Sparkles, exact: true },
+  { label: 'Timeline', to: '/dashboard/timeline', icon: History, exact: true, feature: 'activityTimeline' },
+  { label: 'Source Tracking', to: '/dashboard/source-tracking', icon: Radio, exact: true, feature: 'sourceAnalytics' },
+  { label: 'AI Analysis', to: '/dashboard/ai-analysis', icon: Sparkles, exact: true, feature: 'aiAnalytics' },
   { label: 'Settings', to: '/dashboard/settings', icon: Settings, exact: false },
 ]
+
+// Show a lock affordance on nav items the org's plan can't access yet. The
+// link still works — it lands on the page's in-context upgrade card.
+const { hasFeature } = usePlanFeature()
+function isNavLocked(item: { feature?: PlanFeature }): boolean {
+  return item.feature != null && !hasFeature(item.feature)
+}
 
 // Items shown only when their feature flag is enabled. Filtered into mainNav
 // reactively so the gating happens at render time (PostHog flags load async).
@@ -162,11 +168,15 @@ function isActiveRoute(to: string, exact: boolean) {
   return route.path === localizedTo || route.path.startsWith(`${localizedTo}/`)
 }
 
+const primaryNavLabels = ['Dashboard', 'Jobs', 'Candidates', 'Applications', 'Inbox', 'Interviews', 'Settings']
+const primaryNavItems = computed(() => navItems.value.filter(i => primaryNavLabels.includes(i.label)))
+const moreNavItems = computed(() => navItems.value.filter(i => !primaryNavLabels.includes(i.label)))
+
 // Close menus on route change
 watch(() => route.path, () => {
   showUserMenu.value = false
   showMobileMenu.value = false
-  showGetStartedMenu.value = false
+  showDemoPlanMenu.value = false
 })
 
 // ─────────────────────────────────────────────
@@ -194,18 +204,16 @@ function onClickOutsideUser(e: MouseEvent) {
 }
 onMounted(() => {
   document.addEventListener('click', onClickOutsideUser)
-  document.addEventListener('click', onClickOutsideGetStarted)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutsideUser)
-  document.removeEventListener('click', onClickOutsideGetStarted)
 })
 </script>
 
 <template>
   <header class="sticky top-0 z-50 w-full">
     <!-- Primary navigation bar -->
-    <div class="relative z-20 border-b border-surface-200/80 dark:border-surface-800/80 bg-white/80 dark:bg-surface-900/80 backdrop-blur-xl">
+  <div v-if="!activeJobId" class="relative z-20 border-b border-surface-200/80 dark:border-surface-800/80 bg-white/80 dark:bg-surface-900/80 backdrop-blur-xl">
       <div class="flex h-14 items-center justify-between px-4 lg:px-6">
         <!-- Left: Logo + Nav -->
         <div class="flex items-center gap-1 lg:gap-2">
@@ -221,40 +229,93 @@ onUnmounted(() => {
           <!-- Desktop nav links -->
           <nav class="hidden md:flex items-center gap-0.5">
             <NuxtLink
-              v-for="item in navItems"
+              v-for="item in primaryNavItems"
               :key="item.to"
               :to="$localePath(item.to)"
-              class="relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all duration-200 no-underline"
+              class="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all duration-200 no-underline"
               :class="isActiveRoute(item.to, item.exact)
                 ? 'text-brand-700 dark:text-brand-300 bg-brand-50/80 dark:bg-brand-950/40'
                 : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 hover:bg-surface-100/80 dark:hover:bg-surface-800/60'"
             >
               <component :is="item.icon" class="size-4" />
               {{ item.label }}
-              <span
-                v-if="item.comingSoon"
-                class="ml-0.5 inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-amber-700 dark:text-amber-400 ring-1 ring-inset ring-amber-200/60 dark:ring-amber-800/40"
-              >
-                Soon
-              </span>
             </NuxtLink>
+
+            <!-- More nav dropdown -->
+            <div
+              v-if="moreNavItems.length"
+              class="relative"
+              @mouseenter="showMoreNav = true"
+              @mouseleave="showMoreNav = false"
+            >
+              <button
+                class="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all duration-200 cursor-pointer border-0 bg-transparent"
+                :class="moreNavItems.some(i => isActiveRoute(i.to, i.exact))
+                  ? 'text-brand-700 dark:text-brand-300 bg-brand-50/80 dark:bg-brand-950/40'
+                  : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 hover:bg-surface-100/80 dark:hover:bg-surface-800/60'"
+              >
+                More
+                <ChevronDown
+                  class="size-3 opacity-60 transition-transform duration-200"
+                  :class="showMoreNav ? 'rotate-180' : ''"
+                />
+              </button>
+  <Transition
+    v-if="!activeJobId"
+                enter-active-class="transition duration-150 ease-out"
+                enter-from-class="opacity-0 scale-95 -translate-y-1"
+                enter-to-class="opacity-100 scale-100 translate-y-0"
+                leave-active-class="transition duration-100 ease-in"
+                leave-from-class="opacity-100 scale-100 translate-y-0"
+                leave-to-class="opacity-0 scale-95 -translate-y-1"
+              >
+                <div
+                  v-if="showMoreNav"
+                  class="absolute left-0 top-full z-50 pt-1.5"
+                >
+                  <div class="w-52 rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/8 dark:shadow-surface-950/30 overflow-hidden py-1">
+                    <NuxtLink
+                      v-for="item in moreNavItems"
+                      :key="item.to"
+                      :to="$localePath(item.to)"
+                      class="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors no-underline"
+                      :class="isActiveRoute(item.to, item.exact)
+                        ? 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/40'
+                        : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 hover:bg-surface-100 dark:hover:bg-surface-800'"
+                    >
+                      <component :is="item.icon" class="size-4" />
+                      {{ item.label }}
+                      <Lock
+                        v-if="isNavLocked(item)"
+                        class="ml-auto size-3 text-surface-400 dark:text-surface-500"
+                      />
+                    </NuxtLink>
+                  </div>
+                </div>
+              </Transition>
+            </div>
           </nav>
         </div>
 
         <!-- Right: Actions -->
         <div class="flex items-center gap-1 lg:gap-1.5">
           <!-- Get Started CTA (demo mode only) -->
-          <div v-if="isDemo" ref="getStartedMenuRoot" class="relative hidden sm:block">
+          <div
+            v-if="isDemo"
+            class="relative hidden sm:block"
+            @mouseenter="showDemoPlanMenu = true"
+            @mouseleave="showDemoPlanMenu = false"
+          >
             <button
-              class="group inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-brand-600 to-violet-600 px-4 py-1.5 text-[13px] font-semibold text-white shadow-md shadow-brand-600/25 hover:shadow-lg hover:shadow-brand-600/30 active:shadow-sm transition-all duration-200 cursor-pointer border-0"
-              @click="showGetStartedMenu = !showGetStartedMenu"
+              type="button"
+              class="group inline-flex items-center gap-2 rounded-lg border-0 bg-gradient-to-r from-brand-600 to-violet-600 px-4 py-1.5 text-[13px] font-semibold text-white shadow-md shadow-brand-600/25 transition-all duration-200 hover:-translate-y-px hover:shadow-lg hover:shadow-brand-600/30 active:translate-y-0 active:shadow-sm"
+              :aria-expanded="showDemoPlanMenu"
+              aria-haspopup="menu"
+              @click="showDemoPlanMenu = !showDemoPlanMenu"
             >
               <Sparkles class="size-3.5 transition-transform duration-300 group-hover:rotate-12" />
               Get Started
-              <ChevronDown
-                class="size-3 opacity-70 transition-transform duration-200"
-                :class="showGetStartedMenu ? 'rotate-180' : ''"
-              />
+              <ChevronDown class="size-3 opacity-70 transition-transform duration-200" :class="showDemoPlanMenu ? 'rotate-180' : ''" />
             </button>
 
             <Transition
@@ -266,43 +327,26 @@ onUnmounted(() => {
               leave-to-class="opacity-0 scale-95 -translate-y-1"
             >
               <div
-                v-if="showGetStartedMenu"
-                class="absolute right-0 top-[calc(100%+6px)] w-72 rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/8 dark:shadow-surface-950/30 overflow-hidden"
+                v-if="showDemoPlanMenu"
+                class="absolute right-0 top-[calc(100%+6px)] z-50 w-[420px] overflow-hidden rounded-xl border border-surface-200 bg-white shadow-2xl shadow-surface-900/10 dark:border-surface-700 dark:bg-surface-950 dark:shadow-black/40"
               >
-                <div class="px-4 py-3 border-b border-surface-100 dark:border-surface-800">
-                  <p class="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">Choose your setup</p>
+                <div class="border-b border-surface-100 bg-gradient-to-br from-brand-50 to-violet-50 px-4 py-3 dark:border-surface-800 dark:from-brand-950/30 dark:to-violet-950/30">
+                  <p class="text-sm font-semibold text-surface-950 dark:text-white">Start from the demo</p>
+                  <p class="mt-0.5 text-xs text-surface-500 dark:text-surface-400">
+                    Create a workspace with the plan already selected.
+                  </p>
                 </div>
-                <div class="p-2 space-y-1">
-                  <NuxtLink
-                    :to="$localePath('/auth/fresh-signup')"
-                    class="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-brand-50 dark:hover:bg-brand-950/30 no-underline group/item"
-                  >
-                    <div class="flex items-center justify-center size-8 rounded-lg bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 shrink-0 mt-0.5">
-                      <Cloud class="size-4" />
-                    </div>
-                    <div>
-                      <div class="text-sm font-semibold text-surface-900 dark:text-surface-100 group-hover/item:text-brand-700 dark:group-hover/item:text-brand-300 transition-colors">Cloud Hosted</div>
-                      <div class="text-xs text-surface-500 dark:text-surface-400 mt-0.5">Start free in seconds — we handle hosting, updates &amp; backups</div>
-                    </div>
-                  </NuxtLink>
-                  <a
-                    href="https://github.com/reqcore-inc/reqcore#quick-start"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800/60 no-underline group/item"
-                  >
-                    <div class="flex items-center justify-center size-8 rounded-lg bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 shrink-0 mt-0.5">
-                      <Server class="size-4" />
-                    </div>
-                    <div>
-                      <div class="text-sm font-semibold text-surface-900 dark:text-surface-100 group-hover/item:text-surface-700 dark:group-hover/item:text-surface-200 transition-colors">Self-Host</div>
-                      <div class="text-xs text-surface-500 dark:text-surface-400 mt-0.5">Deploy on your own infrastructure — full control, 100% free</div>
-                    </div>
-                  </a>
+                <div class="p-3">
+                  <DemoSignupOptions compact @select="showDemoPlanMenu = false" />
                 </div>
               </div>
             </Transition>
           </div>
+
+          <!-- Free-plan upgrade pill (hidden in demo, which has its own CTA) -->
+          <ClientOnly>
+            <FreePlanUpgradeMenu v-if="!isDemo" />
+          </ClientOnly>
 
           <!-- New Job button (desktop) -->
           <button
@@ -313,51 +357,8 @@ onUnmounted(() => {
             New Job
           </button>
 
-          <!-- Org Switcher -->
-          <div class="hidden lg:block ml-1">
-            <OrgSwitcher />
-          </div>
-
-          <!-- Language Switcher -->
-          <div class="hidden lg:block">
-            <LanguageSwitcher />
-          </div>
-
-          <!-- Color mode toggle -->
-          <button
-            class="flex items-center justify-center size-8 rounded-lg text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition-all duration-200 cursor-pointer border-0 bg-transparent"
-            :title="isDark ? 'Switch to light' : 'Switch to dark'"
-            @click="toggleColorMode"
-          >
-            <Sun v-if="isDark" class="size-4" />
-            <Moon v-else class="size-4" />
-          </button>
-
-          <!-- Updates button -->
-          <NuxtLink
-            :to="$localePath('/dashboard/updates')"
-            class="hidden sm:flex items-center justify-center size-8 rounded-lg transition-all duration-200 no-underline"
-            :class="isActiveRoute('/dashboard/updates', false)
-              ? 'text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40'
-              : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800'"
-            title="Updates & changelog"
-            aria-label="Updates & changelog"
-          >
-            <ArrowUpCircle class="size-4" />
-          </NuxtLink>
-
-          <!-- Feedback button -->
-          <button
-            v-if="isFeedbackEnabled"
-            class="flex items-center justify-center size-8 rounded-lg text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition-all duration-200 cursor-pointer border-0 bg-transparent"
-            title="Report issue"
-            @click="showFeedbackModal = true"
-          >
-            <MessageSquarePlus class="size-4" />
-          </button>
-
           <!-- Divider -->
-          <div class="hidden sm:block w-px h-6 bg-surface-200 dark:bg-surface-700 mx-1" />
+          <div class="hidden sm:block w-px h-6 bg-surface-200 dark:bg-surface-700 mx-0.5" />
 
           <!-- User menu -->
           <div ref="userMenuRoot" class="relative">
@@ -385,10 +386,10 @@ onUnmounted(() => {
             >
               <div
                 v-if="showUserMenu"
-                class="absolute right-0 top-[calc(100%+6px)] w-64 rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/8 dark:shadow-surface-950/30 overflow-hidden"
+                class="absolute right-0 top-[calc(100%+6px)] w-64 rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-xl shadow-surface-900/8 dark:shadow-surface-950/30"
               >
                 <!-- User info header -->
-                <div class="px-4 py-3 border-b border-surface-100 dark:border-surface-800">
+                <div class="rounded-t-xl overflow-hidden px-4 py-3 border-b border-surface-100 dark:border-surface-800">
                   <div class="text-sm font-semibold text-surface-900 dark:text-surface-100">{{ userName }}</div>
                   <div class="text-xs text-surface-500 dark:text-surface-400 truncate mt-0.5">{{ userEmail }}</div>
                 </div>
@@ -410,16 +411,71 @@ onUnmounted(() => {
                     >
                       Soon
                     </span>
+                    <Lock
+                      v-else-if="isNavLocked(item)"
+                      class="ml-auto size-3 text-surface-400 dark:text-surface-500"
+                    />
                   </NuxtLink>
                 </div>
 
-                <!-- Org switcher (mobile) -->
-                <div class="lg:hidden border-b border-surface-100 dark:border-surface-800 p-2">
+                <!-- Org switcher -->
+                <div class="border-b border-surface-100 dark:border-surface-800 p-2">
                   <OrgSwitcher />
                 </div>
 
-                <!-- Actions -->
-                <div class="py-1">
+                <!-- Preferences -->
+                <div class="border-b border-surface-100 dark:border-surface-800 py-1">
+                  <button
+                    class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-100 transition-colors cursor-pointer border-0 bg-transparent text-left"
+                    @click="toggleColorMode"
+                  >
+                    <Sun v-if="isDark" class="size-4" />
+                    <Moon v-else class="size-4" />
+                    {{ isDark ? 'Light mode' : 'Dark mode' }}
+                  </button>
+                  <div class="flex items-center justify-between gap-2 px-4 py-2">
+                    <span class="flex items-center gap-2.5 text-sm text-surface-600 dark:text-surface-400">
+                      <Languages class="size-4" />
+                      Language
+                    </span>
+                    <LanguageSwitcher drop-up />
+                  </div>
+                </div>
+
+                <!-- Links -->
+                <div class="border-b border-surface-100 dark:border-surface-800 py-1">
+                  <NuxtLink
+                    :to="$localePath('/dashboard/settings')"
+                    class="flex items-center gap-2.5 px-4 py-2 text-sm transition-colors no-underline"
+                    :class="isActiveRoute('/dashboard/settings', false)
+                      ? 'text-brand-600 dark:text-brand-400 font-medium'
+                      : 'text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-100'"
+                  >
+                    <Settings class="size-4" />
+                    Settings
+                  </NuxtLink>
+                  <NuxtLink
+                    :to="$localePath('/dashboard/updates')"
+                    class="flex items-center gap-2.5 px-4 py-2 text-sm transition-colors no-underline"
+                    :class="isActiveRoute('/dashboard/updates', false)
+                      ? 'text-brand-600 dark:text-brand-400 font-medium'
+                      : 'text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-100'"
+                  >
+                    <ArrowUpCircle class="size-4" />
+                    Updates & changelog
+                  </NuxtLink>
+                  <button
+                    v-if="isFeedbackEnabled"
+                    class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-100 transition-colors cursor-pointer border-0 bg-transparent text-left"
+                    @click="showFeedbackModal = true; showUserMenu = false"
+                  >
+                    <MessageSquarePlus class="size-4" />
+                    Report issue
+                  </button>
+                </div>
+
+                <!-- Sign out -->
+                <div class="rounded-b-xl overflow-hidden py-1">
                   <button
                     class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-100 transition-colors cursor-pointer border-0 bg-transparent text-left"
                     :disabled="isSigningOut"
@@ -533,6 +589,10 @@ onUnmounted(() => {
             >
               Soon
             </span>
+            <Lock
+              v-else-if="isNavLocked(item)"
+              class="ml-auto size-3.5 text-surface-400 dark:text-surface-500"
+            />
           </NuxtLink>
 
           <button
@@ -547,22 +607,7 @@ onUnmounted(() => {
           <template v-if="isDemo">
             <div class="mt-2 pt-2 border-t border-surface-200 dark:border-surface-700">
               <p class="px-3 mb-1.5 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">Get Started</p>
-              <NuxtLink
-                :to="$localePath('/auth/fresh-signup')"
-                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-950/60 transition-colors no-underline"
-              >
-                <Cloud class="size-4" />
-                Cloud Hosted — Start Free
-              </NuxtLink>
-              <a
-                href="https://github.com/reqcore-inc/reqcore#quick-start"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors no-underline mt-1"
-              >
-                <Server class="size-4" />
-                Self-Host — Deploy Free
-              </a>
+              <DemoSignupOptions compact @select="showMobileMenu = false" />
             </div>
           </template>
         </nav>

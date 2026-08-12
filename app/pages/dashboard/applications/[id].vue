@@ -12,7 +12,7 @@ const applicationId = route.params.id as string
 const { handlePreviewReadOnlyError } = usePreviewReadOnly()
 const toast = useToast()
 
-const { application, status: fetchStatus, error, updateApplication } = useApplication(applicationId)
+const { application, status: fetchStatus, error, refresh, updateApplication } = useApplication(applicationId)
 
 const { formatCandidateName } = useOrgSettings()
 
@@ -352,6 +352,18 @@ function formatResponseValue(value: unknown): string {
           {{ application.notes }}
         </p>
         <p v-else class="text-sm text-surface-400 italic">No notes yet.</p>
+      </div>
+
+      <!-- Custom properties (Notion-style) -->
+      <div class="rounded-lg border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-4 mb-4">
+        <h2 class="text-sm font-semibold text-surface-700 dark:text-surface-200 mb-2 px-2">Properties</h2>
+        <PropertyBlock
+          entity-type="application"
+          :entity-id="applicationId"
+          :job-id="application.job.id"
+          :entries="(application.properties ?? []) as import('~~/shared/properties').PropertyEntry[]"
+          @refresh="refresh()"
+        />
       </div>
 
       <!-- Question Responses -->

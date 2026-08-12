@@ -26,6 +26,8 @@ const emit = defineEmits<{
 
 const model = defineModel<string | string[] | number | boolean | undefined>()
 
+const { t } = useI18n()
+
 // String-coerced model for text inputs (avoids TS error with boolean in v-model on <input>)
 const stringModel = computed({
   get: () => (model.value as string) ?? '',
@@ -146,7 +148,7 @@ const normalBorderClass = 'border-surface-300 dark:border-surface-700'
       :required="question.required"
       :class="[inputClasses, 'bg-white dark:bg-surface-900', error ? errorBorderClass : normalBorderClass]"
     >
-      <option value="" disabled>Select an option…</option>
+      <option value="" disabled>{{ t('jobs.question.selectOption') }}</option>
       <option v-for="opt in question.options" :key="opt" :value="opt">
         {{ opt }}
       </option>
@@ -195,7 +197,7 @@ const normalBorderClass = 'border-surface-300 dark:border-surface-700'
       :id="`q-${question.id}`"
       v-model="stringModel"
       type="url"
-      placeholder="https://…"
+      :placeholder="t('jobs.question.urlPlaceholder')"
       :required="question.required"
       :class="[inputClasses, error ? errorBorderClass : normalBorderClass]"
     />
@@ -208,7 +210,7 @@ const normalBorderClass = 'border-surface-300 dark:border-surface-700'
         type="checkbox"
         class="size-4 rounded border-surface-300 dark:border-surface-700 text-brand-600 focus:ring-brand-500"
       />
-      <span class="text-sm text-surface-700 dark:text-surface-300">Yes</span>
+      <span class="text-sm text-surface-700 dark:text-surface-300">{{ t('jobs.question.yes') }}</span>
     </label>
 
     <!-- File Upload -->
@@ -230,7 +232,7 @@ const normalBorderClass = 'border-surface-300 dark:border-surface-700'
         @click="fileInputRef?.click()"
       >
         <Upload class="size-4" />
-        Choose file (PDF, DOC, DOCX — max 10 MB)
+        {{ t('jobs.question.chooseFileHint') }}
       </button>
 
       <!-- File selected -->

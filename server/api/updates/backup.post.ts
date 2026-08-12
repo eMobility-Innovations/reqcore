@@ -50,12 +50,17 @@ export default defineEventHandler(async (event) => {
     const user = dbUrl.username
     const database = dbUrl.pathname.slice(1)
 
+    // Build a minimal env for pg_dump (see server/utils/pgDumpEnv.ts).
+    // Spreading process.env would expose every secret in the parent process
+    // (BETTER_AUTH_SECRET, S3_SECRET_KEY, OAuth credentials, etc.) to the
+    // child — and any of them could leak through pg_dump's stderr or a libpq
+    // diagnostic. The allowlist forwards only what pg_dump actually needs.
     await execFileAsync(
       'pg_dump',
       ['-h', host, '-p', port, '-U', user, '-d', database, '--no-owner', '--no-acl', '-f', backupPath],
       {
         timeout: 300_000,
-        env: { ...process.env, PGPASSWORD: dbUrl.password },
+        env: buildPgDumpEnv(process.env, dbUrl.password),
       },
     )
 

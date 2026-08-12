@@ -1,11 +1,33 @@
 <script setup lang="ts">
-import { ChevronDown } from 'lucide-vue-next'
+import { Check, ChevronDown } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{
   dropUp?: boolean
+  /**
+   * Horizontal edge the menu aligns to. Defaults follow `dropUp` for backwards
+   * compatibility (drop-up menus align left, drop-down menus align right). Set
+   * explicitly when the trigger sits near a screen edge so the menu opens
+   * inward instead of off-screen.
+   */
+  align?: 'left' | 'right'
+  /** Show the translated "Language" label next to the trigger. */
+  showLabel?: boolean
+  /** Use the configured language name in the trigger instead of only the code. */
+  showName?: boolean
+  /** Slightly larger, higher-contrast trigger for pages where language choice matters. */
+  prominent?: boolean
 }>(), {
   dropUp: false,
+  showLabel: false,
+  showName: false,
+  prominent: false,
 })
+
+const preferredHorizontalAlign = computed(() =>
+  props.align ?? (props.dropUp ? 'left' : 'right'),
+)
+const renderedHorizontalAlign = ref<'left' | 'right'>(preferredHorizontalAlign.value)
+const menuOffsetX = ref(0)
 
 const route = useRoute()
 const requestURL = useRequestURL()
@@ -13,10 +35,70 @@ const { locale, locales, t } = useI18n()
 
 const isOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
+const menuRef = ref<HTMLElement | null>(null)
 
 function closeDropdown() {
   isOpen.value = false
 }
+
+function updateMenuPlacement() {
+  if (!import.meta.client || !isOpen.value || !dropdownRef.value || !menuRef.value) return
+
+  const triggerRect = dropdownRef.value.getBoundingClientRect()
+  const menuRect = menuRef.value.getBoundingClientRect()
+  const viewportPadding = 8
+  const menuWidth = menuRect.width
+  const wouldFitLeftAligned = triggerRect.left + menuWidth <= window.innerWidth - viewportPadding
+  const wouldFitRightAligned = triggerRect.right - menuWidth >= viewportPadding
+
+  // Prefer the alignment that keeps the menu on-screen without shifting.
+  if (preferredHorizontalAlign.value === 'left' && !wouldFitLeftAligned && wouldFitRightAligned) {
+    renderedHorizontalAlign.value = 'right'
+  }
+  else if (preferredHorizontalAlign.value === 'right' && !wouldFitRightAligned && wouldFitLeftAligned) {
+    renderedHorizontalAlign.value = 'left'
+  }
+  else {
+    renderedHorizontalAlign.value = preferredHorizontalAlign.value
+  }
+
+  // Even the chosen alignment can overflow when the trigger sits inside a
+  // narrow popup near a screen edge (e.g. the user menu). Nudge the menu back
+  // into the viewport so it never renders off-screen.
+  const menuLeft = renderedHorizontalAlign.value === 'left'
+    ? triggerRect.left
+    : triggerRect.right - menuWidth
+  const menuRight = menuLeft + menuWidth
+  const overflowRight = menuRight - (window.innerWidth - viewportPadding)
+  const overflowLeft = viewportPadding - menuLeft
+
+  if (overflowRight > 0) {
+    menuOffsetX.value = -overflowRight
+  }
+  else if (overflowLeft > 0) {
+    menuOffsetX.value = overflowLeft
+  }
+  else {
+    menuOffsetX.value = 0
+  }
+}
+
+watch(preferredHorizontalAlign, async (nextAlign) => {
+  renderedHorizontalAlign.value = nextAlign
+  if (!isOpen.value) return
+  await nextTick()
+  updateMenuPlacement()
+})
+
+watch(isOpen, async (open) => {
+  if (!open) {
+    menuOffsetX.value = 0
+    return
+  }
+  renderedHorizontalAlign.value = preferredHorizontalAlign.value
+  await nextTick()
+  updateMenuPlacement()
+})
 
 function handleClickOutside(event: MouseEvent) {
   if (dropdownRef.value && !dropdownRef.value.contains(event.target as Node)) {
@@ -24,8 +106,14 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 
-onMounted(() => document.addEventListener('mousedown', handleClickOutside))
-onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
+onMounted(() => {
+  document.addEventListener('mousedown', handleClickOutside)
+  window.addEventListener('resize', updateMenuPlacement)
+})
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handleClickOutside)
+  window.removeEventListener('resize', updateMenuPlacement)
+})
 const localePath = useLocalePath()
 const switchLocalePath = useSwitchLocalePath()
 type SwitchLocale = Parameters<typeof switchLocalePath>[0]
@@ -42,12 +130,19 @@ const localeFlags: Record<string, string> = {
   nb: '🇳🇴',
 }
 
-type LocaleEntry = string | { code?: string | null }
+type LocaleEntry = string | { code?: string | null, name?: string | null }
 
 function getLocaleCode(entry: LocaleEntry): string | null {
   if (typeof entry === 'string') return entry
   if (!entry || typeof entry.code !== 'string') return null
   return entry.code
+}
+
+function getLocaleName(entry: LocaleEntry, code: string): string {
+  if (typeof entry !== 'string' && typeof entry.name === 'string' && entry.name.trim()) {
+    return entry.name
+  }
+  return code.toUpperCase()
 }
 
 function getLocaleFromRouteParam(value: LocaleParam): string | null {
@@ -80,12 +175,13 @@ const localeOptions = computed(() => {
     .map((entry) => {
       const code = getLocaleCode(entry as LocaleEntry)
       const partial = (entry as LocaleWithPartial).partial === true
-      return code ? { code, partial } : null
+      return code ? { code, partial, name: getLocaleName(entry as LocaleEntry, code) } : null
     })
-    .filter((item): item is { code: string, partial: boolean } => !!item)
-    .map(({ code, partial }) => ({
+    .filter((item): item is { code: string, partial: boolean, name: string } => !!item)
+    .map(({ code, partial, name }) => ({
       code,
       partial,
+      name,
       flag: localeFlags[code] ?? '🌐',
     }))
 })
@@ -146,6 +242,16 @@ const selectedLocaleCode = computed({
   },
 })
 
+const selectedLocaleOption = computed(() =>
+  localeOptions.value.find(option => option.code === selectedLocaleCode.value),
+)
+
+const selectedLocaleDisplay = computed(() =>
+  props.showName
+    ? (selectedLocaleOption.value?.name ?? selectedLocaleCode.value.toUpperCase())
+    : selectedLocaleCode.value,
+)
+
 const showI18nProbe = computed(() => {
   const i18nTestQuery = route.query.i18nTest
   if (Array.isArray(i18nTestQuery)) return i18nTestQuery.includes('1')
@@ -175,6 +281,12 @@ async function handleLocaleChange(nextLocale: string) {
     >
       {{ i18nProbeText }}
     </span>
+    <span
+      v-else-if="props.showLabel"
+      class="text-xs font-medium text-surface-500 dark:text-surface-400"
+    >
+      {{ t('common.language') }}
+    </span>
 
     <div ref="dropdownRef" class="relative">
       <!-- Trigger button -->
@@ -183,20 +295,28 @@ async function handleLocaleChange(nextLocale: string) {
         :aria-label="t('common.selectLanguage')"
         :aria-expanded="isOpen"
         aria-haspopup="listbox"
-        class="flex h-8 items-center gap-1 rounded-md border border-surface-300/45 dark:border-surface-700/55 bg-transparent px-2 text-xs font-medium lowercase text-surface-500 dark:text-surface-400 outline-none transition-colors hover:border-surface-400/60 hover:text-surface-700 dark:hover:border-surface-600 dark:hover:text-surface-200 focus:border-brand-500/70 focus:text-surface-800 dark:focus:text-surface-100"
+        class="flex items-center gap-1.5 border outline-none transition-colors focus:border-brand-500/70 focus:text-surface-800 dark:focus:text-surface-100"
+        :class="props.prominent
+          ? 'h-10 rounded-lg border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-900 px-3 text-sm font-semibold text-surface-800 dark:text-surface-100 shadow-sm hover:border-surface-400 dark:hover:border-surface-600'
+          : 'h-8 rounded-md border-surface-300/45 dark:border-surface-700/55 bg-transparent px-2 text-xs font-medium lowercase text-surface-500 dark:text-surface-400 hover:border-surface-400/60 hover:text-surface-700 dark:hover:border-surface-600 dark:hover:text-surface-200'"
         @click="isOpen = !isOpen"
       >
-        <span>{{ localeOptions.find(o => o.code === selectedLocaleCode)?.flag ?? '🌐' }} {{ selectedLocaleCode }}</span>
+        <span>{{ selectedLocaleOption?.flag ?? '🌐' }} {{ selectedLocaleDisplay }}</span>
         <ChevronDown class="size-3 opacity-60 transition-transform duration-150" :class="{ 'rotate-180': isOpen }" />
       </button>
 
       <!-- Dropdown list -->
       <ul
         v-if="isOpen"
+        ref="menuRef"
         role="listbox"
         :aria-label="t('common.selectLanguage')"
-        class="absolute z-50 min-w-40 rounded-md border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-lg py-1 text-xs"
-        :class="props.dropUp ? 'left-0 bottom-full mb-1' : 'right-0 mt-1'"
+        class="absolute z-50 w-48 max-w-[calc(100vw-1rem)] rounded-md border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-lg py-1 text-xs"
+        :class="[
+          props.dropUp ? 'bottom-full mb-1' : 'mt-1',
+          renderedHorizontalAlign === 'left' ? 'left-0' : 'right-0',
+        ]"
+        :style="menuOffsetX ? { transform: `translateX(${menuOffsetX}px)` } : undefined"
       >
         <li
           v-for="option in localeOptions"
@@ -209,12 +329,19 @@ async function handleLocaleChange(nextLocale: string) {
             : 'text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800'"
           @click="handleLocaleChange(option.code)"
         >
-          <span class="flex items-center gap-1.5">
+          <span class="flex min-w-0 items-center gap-2">
             <span>{{ option.flag }}</span>
-            <span class="font-medium">{{ option.code }}</span>
+            <span class="min-w-0">
+              <span class="block truncate font-medium">{{ option.name }}</span>
+              <span class="block text-[10px] uppercase text-surface-400">{{ option.code }}</span>
+            </span>
           </span>
+          <Check
+            v-if="option.code === selectedLocaleCode"
+            class="size-3.5 shrink-0 text-brand-600 dark:text-brand-400"
+          />
           <span
-            v-if="option.partial"
+            v-else-if="option.partial"
             class="rounded bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400"
             title="Translation incomplete"
           >

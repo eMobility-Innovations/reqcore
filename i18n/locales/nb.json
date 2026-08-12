@@ -8,6 +8,7 @@
   "home": {
     "nav": {
       "features": "Funksjoner",
+      "pricing": "Priser",
       "openPositions": "Åpne stillinger",
       "roadmap": "Fremdriftsplan",
       "blog": "Blogg",
@@ -16,35 +17,250 @@
       "logIn": "Logg inn",
       "signUp": "Registrer deg"
     },
-    "badge": "Åpen kildekode ATS for utviklerteam",
+    "badge": "Hosted ATS for modern hiring teams",
     "hero": {
-      "titleLine1": "Din rekruttering.",
-      "titleHighlight": "Din infrastruktur.",
-      "subtitle": "Åpen kildekode kandidatsporing bygget for team som drifter selv.",
+      "titleLine1": "Hiring software",
+      "titleHighlight": "that starts free.",
+      "subtitle": "Track your first role in Reqcore with 1 active job and 300 applicants free. Upgrade only when your hiring pipeline grows.",
       "goToDashboard": "Gå til kontrollpanel",
       "signIn": "Logg inn",
       "createAccount": "Opprett konto",
       "ctaDemo": "Prøv live demo",
-      "ctaStart": "Se på GitHub",
-      "hint": "Tidlig åpen kildekode-utgivelse — prøv demoen med eksempeldata, ingen registrering nødvendig"
+      "ctaStart": "Start free",
+      "hint": "Try the demo with sample data, no sign-up needed"
     },
     "pillars": {
       "yourData": {
-        "label": "Dine data",
-        "desc": "Postgres + MinIO på din infrastruktur. Ingenting forlater nettverket ditt."
+        "label": "One free active job",
+        "desc": "Run a real hiring process before you pay. No credit card needed."
       },
       "auditable": {
-        "label": "Fullt reviderbar",
-        "desc": "Åpen kildekode — hver linje med matchingslogikk er synlig og kan overstyres."
+        "label": "300 applicants included",
+        "desc": "Enough room to test sourcing, screening, and pipeline flow on a real role."
       },
       "unlimitedSeats": {
         "label": "Ubegrensede plasser",
-        "desc": "Legg til hele rekrutteringsteamet ditt. Ingen pris per bruker, noensinne."
+        "desc": "Add your hiring team without turning every collaborator into another seat charge."
       }
     },
     "footer": {
-      "source": "Kildekode",
-      "tagline": "Reqcore — åpen kildekode kandidatsporing"
+      "source": "Pricing",
+      "tagline": "Reqcore — applicant tracking that starts free"
+    }
+  },
+  "retention": {
+    "title": "Personvern og datalagring",
+    "description": "Konfigurer personverninformasjon og fjern kandidatdata automatisk etter lagringsperioden.",
+    "policy": {
+      "title": "Lagringspolicy",
+      "description": "Beregnes fra kandidatens siste aktivitet i rekrutteringsprosessen.",
+      "enable": "Aktiver automatisk datalagring",
+      "enableHelp": "Utløpte kandidater settes i karantene før permanent sletting. Eksisterende data får først en gjennomgangsperiode.",
+      "months": "Lagringsperiode (måneder)",
+      "quarantineDays": "Karanteneperiode (dager)",
+      "quarantineHelp": "Gjenopprettbar frist før permanent sletting."
+    },
+    "privacy": {
+      "title": "Personverninformasjon i søknadsskjemaet",
+      "description": "Vises til søkere i det offentlige søknadsskjemaet.",
+      "url": "URL til personvernerklæring",
+      "email": "E-post for personvernhenvendelser",
+      "text": "Informasjonstekst (valgfritt)",
+      "defaultNotice": "Ved å søke godtar du at {organization} behandler søknadsdataene dine for å vurdere kandidaturet ditt. Dataene lagres bare så lenge det er nødvendig, og slettes deretter.",
+      "thisOrganization": "denne organisasjonen",
+      "policyLink": "Personvernerklæring",
+      "contactLabel": "Kontakt"
+    },
+    "save": {
+      "button": "Lagre endringer",
+      "saving": "Lagrer…",
+      "saved": "Lagret!",
+      "permission": "Bare administratorer og eiere kan endre disse innstillingene."
+    },
+    "review": {
+      "title": "Kommende slettinger",
+      "description": "Kandidater som snart utløper, er i karantene eller er unntatt.",
+      "instanceDisabled": "Automatisk opprydding er satt på pause av systemadministratoren. Policyer og gjennomgangsdata er uendret.",
+      "loading": "Laster…",
+      "empty": "Ingenting å gjennomgå. Ingen kandidater nærmer seg lagringsgrensen.",
+      "expires": "Utløper {date}",
+      "erases": "Slettes {date}",
+      "exemptUntil": "Unntatt til {date}"
+    },
+    "status": {
+      "expiring": "Utløper snart",
+      "expired": "Utløpt",
+      "quarantined": "I karantene",
+      "exempt": "Unntatt"
+    },
+    "actions": {
+      "export": "Eksporter data",
+      "restore": "Gjenopprett",
+      "hold": "Legg til juridisk sperre",
+      "clearHold": "Fjern juridisk sperre",
+      "erase": "Slett nå",
+      "holdPrompt": "Begrunnelse for juridisk sperre (for eksempel en pågående tvist):",
+      "eraseConfirm": "Dette sletter {name} og alle tilhørende data permanent, og kan ikke angres. Skriv kandidatens fulle navn for å bekrefte:"
+    },
+    "errors": {
+      "save": "Kunne ikke lagre innstillingene",
+      "restore": "Kunne ikke gjenopprette kandidaten",
+      "hold": "Kunne ikke legge til juridisk sperre",
+      "clearHold": "Kunne ikke fjerne juridisk sperre",
+      "erase": "Kunne ikke slette kandidaten",
+      "eraseNameMismatch": "Navnet stemte ikke. Kandidaten ble ikke slettet."
+    }
+  },
+  "career": {
+    "eyebrow": "Karriere",
+    "metaTitle": "{name} — Karriere",
+    "openRoles": "Ledige stillinger",
+    "headlineWithName": "Ledige stillinger hos {name}",
+    "openRolesCount": "{count} ledig stilling | {count} ledige stillinger",
+    "filteredOf": "{shown} av {total}",
+    "totalCount": "{total} totalt",
+    "searchPlaceholder": "Søk etter stillinger",
+    "allLocations": "Alle steder",
+    "allTypes": "Alle typer",
+    "clear": "Tøm",
+    "emptyTitle": "Ingen ledige stillinger",
+    "emptyBody": "Det er ingen ledige stillinger akkurat nå. Kom tilbake snart.",
+    "noMatchesTitle": "Ingen stillinger samsvarer med filtrene dine",
+    "clearFilters": "Tøm filtre",
+    "notFoundTitle": "Karriereside ikke tilgjengelig",
+    "notFoundBody": "Denne bedriften har ingen offentlig karriereside akkurat nå.",
+    "offlineTitle": "{name} tar ikke imot søknader akkurat nå",
+    "offlineBody": "Kom tilbake senere.",
+    "posted": "Publisert {date}",
+    "poweredBy": "Drevet av",
+    "type": {
+      "full_time": "Heltid",
+      "part_time": "Deltid",
+      "contract": "Kontrakt",
+      "internship": "Praktikplass"
+    },
+    "experience": {
+      "junior": "Junior",
+      "mid": "Mellomnivå",
+      "senior": "Senior",
+      "lead": "Lead"
+    },
+    "remote": {
+      "remote": "Fjernarbeid",
+      "hybrid": "Hybrid",
+      "onsite": "På kontoret"
+    }
+  },
+  "jobs": {
+    "list": {
+      "metaTitle": "Ledige stillinger — Stillingsbank",
+      "metaDescription": "Bla gjennom ledige stillinger hos Reqcore og søk direkte. Finn din neste karrieremulighet hos selskaper som verdsetter åpenhet.",
+      "ogTitle": "Ledige stillinger — Reqcore stillingsbank",
+      "ogDescription": "Bla gjennom ledige stillinger og søk direkte. Drevet av det åpen kildekode-ATS-et du faktisk eier.",
+      "twitterDescription": "Bla gjennom ledige stillinger og søk direkte.",
+      "title": "Ledige stillinger",
+      "subtitle": "Bla gjennom våre aktuelle stillinger og finn din neste mulighet.",
+      "searchPlaceholder": "Søk etter stillinger etter tittel eller sted…",
+      "allTypes": "Alle typer",
+      "loading": "Laster stillinger…",
+      "errorLoad": "Kunne ikke laste stillinger. Prøv igjen.",
+      "retry": "Prøv igjen",
+      "emptyTitle": "Ingen ledige stillinger",
+      "emptyFiltered": "Ingen stillinger samsvarer med filtrene dine. Prøv å justere søket.",
+      "emptyDefault": "Det er ingen ledige stillinger akkurat nå. Kom tilbake snart!",
+      "previous": "Forrige",
+      "next": "Neste",
+      "pageOf": "Side {page} av {total}",
+      "totalCount": "{count} ledig stilling | {count} ledige stillinger"
+    },
+    "detail": {
+      "metaTitleFallback": "Stillingsdetaljer — Reqcore",
+      "metaDescriptionFallback": "Se stillingsdetaljer og søk",
+      "hiringNow": "Ansetter nå",
+      "metaApplyFor": "Søk på",
+      "metaAt": "hos",
+      "metaIn": "i",
+      "notFoundTitle": "Stilling ikke funnet",
+      "notFoundBody": "Denne stillingen er kanskje ikke lenger tilgjengelig eller tar for øyeblikket ikke imot søknader.",
+      "browseAll": "Se alle stillinger",
+      "allPositions": "Alle stillinger",
+      "negotiable": "Forhandlingsbart",
+      "postedOn": "Publisert {date}",
+      "applyNow": "Søk nå",
+      "applyTime": "Tar bare noen minutter · Ingen konto kreves",
+      "seeAllRoles": "Se alle ledige stillinger hos {name}",
+      "careerPageTitle": "Karriere hos {name}",
+      "careerPageDescription": "Besøk selskapets karriereside og se alle ledige stillinger",
+      "companyLogoAlt": "Logoen til {name}",
+      "aboutRole": "Om denne stillingen",
+      "questionsTitle": "Søknadsspørsmål",
+      "questionsIntro": "Du vil bli bedt om å svare på {count} tilleggsspørsmål når du søker. | Du vil bli bedt om å svare på {count} tilleggsspørsmål når du søker.",
+      "required": "Påkrevd",
+      "readyTitle": "Klar til å søke?",
+      "readyBody": "Send inn søknaden din på bare noen minutter.",
+      "applyForPosition": "Søk på denne stillingen"
+    },
+    "apply": {
+      "metaApplyPrefix": "Søknad",
+      "metaTitleFallback": "Søk — Reqcore",
+      "metaDescriptionFallback": "Send inn søknaden din",
+      "notFoundTitle": "Stilling ikke funnet",
+      "notFoundBody": "Denne stillingen kan ha blitt besatt eller tar ikke lenger imot søknader.",
+      "backHome": "Tilbake til forsiden",
+      "backToDetails": "Tilbake til stillingsdetaljer",
+      "genericError": "Noe gikk galt. Prøv igjen.",
+      "validation": {
+        "firstNameRequired": "Fornavn er påkrevd",
+        "lastNameRequired": "Etternavn er påkrevd",
+        "emailRequired": "E-post er påkrevd",
+        "emailInvalid": "Ugyldig e-postadresse",
+        "phoneRequired": "Telefonnummer er påkrevd",
+        "resumeRequired": "CV er påkrevd",
+        "coverLetterRequired": "Søknadsbrev er påkrevd",
+        "coverLetterTooLong": "Søknadsbrevet kan maks være 10 000 tegn.",
+        "fileTooLarge": "Filen er for stor. Maks 10 MB.",
+        "fieldRequired": "Dette feltet er påkrevd"
+      }
+    },
+    "confirmation": {
+      "metaTitle": "Søknad sendt — Reqcore",
+      "title": "Søknaden er mottatt",
+      "thanksWithTitle": "Takk for at du søkte på {title}. Opplysningene dine er nå hos rekrutteringsteamet.",
+      "thanksPlain": "Takk for søknaden. Opplysningene dine er nå hos rekrutteringsteamet.",
+      "received": "Sendt",
+      "backToCareerPage": "Tilbake til karrieresiden til {name}",
+      "browseMore": "Se flere stillinger",
+      "backHome": "Tilbake til forsiden"
+    },
+    "form": {
+      "cardTitle": "Din søknad",
+      "requiredHint": "Felt merket med {mark} er påkrevd.",
+      "firstName": "Fornavn",
+      "firstNamePlaceholder": "Kari",
+      "lastName": "Etternavn",
+      "lastNamePlaceholder": "Nordmann",
+      "email": "E-post",
+      "emailPlaceholder": "deg{'@'}eksempel.no",
+      "phone": "Telefon",
+      "optional": "(valgfritt)",
+      "phonePlaceholder": "+47 123 45 678",
+      "resume": "CV",
+      "resumeHelp": "PDF, DOC eller DOCX — maks 10 MB",
+      "change": "Endre",
+      "chooseFile": "Velg fil",
+      "coverLetter": "Søknadsbrev",
+      "coverLetterPlaceholder": "Fortell oss hvorfor du er interessert i denne stillingen…",
+      "coverLetterMax": "Maks 10 000 tegn.",
+      "additionalQuestions": "Tilleggsspørsmål",
+      "submit": "Send søknad",
+      "submitting": "Sender…",
+      "confidential": "Informasjonen din behandles konfidensielt."
+    },
+    "question": {
+      "selectOption": "Velg et alternativ…",
+      "yes": "Ja",
+      "chooseFileHint": "Velg fil (PDF, DOC, DOCX — maks 10 MB)",
+      "urlPlaceholder": "https://…"
     }
   }
 }

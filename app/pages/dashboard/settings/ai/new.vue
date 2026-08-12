@@ -41,6 +41,10 @@ interface ProviderInfo {
 
 const { allowed: canManageAi, isLoading: isPermissionLoading } = usePermission({ scoring: ['create'] })
 
+// Adding an AI model (BYOK) is available on every plan; guard direct navigation here too.
+const { hasFeature } = usePlanFeature()
+const canUseByok = computed(() => hasFeature('byok'))
+
 const { data: configsData, status: configsStatus } = useFetch<AiConfigRow[]>('/api/ai-config', {
   key: 'ai-configs',
   headers: useRequestHeaders(['cookie']),
@@ -80,6 +84,10 @@ function onCancel() {
         <p class="font-semibold mb-1">Insufficient permissions</p>
         <p>You don't have permission to manage AI settings. Contact your organization owner or admin.</p>
       </div>
+    </div>
+
+    <div v-else-if="!canUseByok" class="mx-auto max-w-2xl">
+      <FeatureLockCard feature="byok" />
     </div>
 
     <div v-else-if="!isReady" class="flex items-center justify-center py-12">

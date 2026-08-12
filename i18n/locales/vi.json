@@ -8,6 +8,7 @@
   "home": {
     "nav": {
       "features": "Tính năng",
+      "pricing": "Bảng giá",
       "openPositions": "Vị trí tuyển dụng",
       "roadmap": "Lộ trình",
       "blog": "Blog",
@@ -16,35 +17,250 @@
       "logIn": "Đăng nhập",
       "signUp": "Đăng ký"
     },
-    "badge": "ATS mã nguồn mở cho đội ngũ phát triển",
+    "badge": "Hosted ATS for modern hiring teams",
     "hero": {
-      "titleLine1": "Tuyển dụng của bạn.",
-      "titleHighlight": "Hạ tầng của bạn.",
-      "subtitle": "Theo dõi ứng viên mã nguồn mở được xây dựng cho các đội tự vận hành.",
+      "titleLine1": "Hiring software",
+      "titleHighlight": "that starts free.",
+      "subtitle": "Track your first role in Reqcore with 1 active job and 300 applicants free. Upgrade only when your hiring pipeline grows.",
       "goToDashboard": "Đi đến bảng điều khiển",
       "signIn": "Đăng nhập",
       "createAccount": "Tạo tài khoản",
       "ctaDemo": "Thử demo trực tiếp",
-      "ctaStart": "Xem trên GitHub",
-      "hint": "Phiên bản mã nguồn mở sớm — thử demo với dữ liệu mẫu, không cần đăng ký"
+      "ctaStart": "Start free",
+      "hint": "Try the demo with sample data, no sign-up needed"
     },
     "pillars": {
       "yourData": {
-        "label": "Dữ liệu của bạn",
-        "desc": "Postgres + MinIO trên hạ tầng của bạn. Không có gì rời khỏi mạng của bạn."
+        "label": "One free active job",
+        "desc": "Run a real hiring process before you pay. No credit card needed."
       },
       "auditable": {
-        "label": "Kiểm toán hoàn toàn",
-        "desc": "Mã nguồn mở — mọi dòng logic matching đều có thể xem và tùy chỉnh."
+        "label": "300 applicants included",
+        "desc": "Enough room to test sourcing, screening, and pipeline flow on a real role."
       },
       "unlimitedSeats": {
         "label": "Không giới hạn người dùng",
-        "desc": "Thêm toàn bộ đội tuyển dụng của bạn. Không tính phí theo người dùng, không bao giờ."
+        "desc": "Add your hiring team without turning every collaborator into another seat charge."
       }
     },
     "footer": {
-      "source": "Mã nguồn",
-      "tagline": "Reqcore — theo dõi ứng viên mã nguồn mở"
+      "source": "Pricing",
+      "tagline": "Reqcore — applicant tracking that starts free"
+    }
+  },
+  "retention": {
+    "title": "Quyền riêng tư và lưu giữ",
+    "description": "Cấu hình thông báo quyền riêng tư và tự động xóa dữ liệu ứng viên sau thời hạn lưu giữ.",
+    "policy": {
+      "title": "Chính sách lưu giữ",
+      "description": "Được tính từ hoạt động tuyển dụng gần nhất của ứng viên.",
+      "enable": "Bật lưu giữ tự động",
+      "enableHelp": "Ứng viên hết hạn được đưa vào vùng cách ly trước khi xóa vĩnh viễn. Dữ liệu hiện có sẽ có thời gian xem xét trước.",
+      "months": "Thời hạn lưu giữ (tháng)",
+      "quarantineDays": "Thời gian cách ly (ngày)",
+      "quarantineHelp": "Khoảng thời gian có thể khôi phục trước khi xóa vĩnh viễn."
+    },
+    "privacy": {
+      "title": "Thông báo quyền riêng tư trên đơn ứng tuyển",
+      "description": "Hiển thị cho ứng viên trên biểu mẫu ứng tuyển công khai.",
+      "url": "URL chính sách quyền riêng tư",
+      "email": "Email liên hệ về quyền riêng tư",
+      "text": "Nội dung thông báo (không bắt buộc)",
+      "defaultNotice": "Bằng việc ứng tuyển, bạn đồng ý cho {organization} xử lý dữ liệu hồ sơ để đánh giá ứng viên. Dữ liệu chỉ được lưu trong thời gian cần thiết và sau đó sẽ bị xóa.",
+      "thisOrganization": "tổ chức này",
+      "policyLink": "Chính sách quyền riêng tư",
+      "contactLabel": "Liên hệ"
+    },
+    "save": {
+      "button": "Lưu thay đổi",
+      "saving": "Đang lưu…",
+      "saved": "Đã lưu!",
+      "permission": "Chỉ quản trị viên và chủ sở hữu mới có thể thay đổi các cài đặt này."
+    },
+    "review": {
+      "title": "Các lượt xóa sắp tới",
+      "description": "Ứng viên sắp hết hạn, đang cách ly hoặc được miễn lưu giữ.",
+      "instanceDisabled": "Quản trị viên hệ thống đã tạm dừng dọn dẹp tự động. Chính sách và dữ liệu xem xét không thay đổi.",
+      "loading": "Đang tải…",
+      "empty": "Không có gì cần xem xét. Không ứng viên nào sắp đạt giới hạn lưu giữ.",
+      "expires": "Hết hạn {date}",
+      "erases": "Xóa vào {date}",
+      "exemptUntil": "Được miễn đến {date}"
+    },
+    "status": {
+      "expiring": "Sắp hết hạn",
+      "expired": "Đã hết hạn",
+      "quarantined": "Đang cách ly",
+      "exempt": "Được miễn"
+    },
+    "actions": {
+      "export": "Xuất dữ liệu",
+      "restore": "Khôi phục",
+      "hold": "Thêm lệnh lưu giữ pháp lý",
+      "clearHold": "Gỡ lệnh lưu giữ pháp lý",
+      "erase": "Xóa ngay",
+      "holdPrompt": "Lý do lưu giữ pháp lý (ví dụ: tranh chấp đang diễn ra):",
+      "eraseConfirm": "Thao tác này xóa vĩnh viễn {name} và toàn bộ dữ liệu của họ, và không thể hoàn tác. Nhập đầy đủ họ tên ứng viên để xác nhận:"
+    },
+    "errors": {
+      "save": "Không thể lưu cài đặt",
+      "restore": "Không thể khôi phục ứng viên",
+      "hold": "Không thể thêm lệnh lưu giữ pháp lý",
+      "clearHold": "Không thể gỡ lệnh lưu giữ pháp lý",
+      "erase": "Không thể xóa ứng viên",
+      "eraseNameMismatch": "Tên không khớp. Ứng viên chưa bị xóa."
+    }
+  },
+  "career": {
+    "eyebrow": "Tuyển dụng",
+    "metaTitle": "{name} — Tuyển dụng",
+    "openRoles": "Vị trí đang tuyển",
+    "headlineWithName": "Vị trí đang tuyển tại {name}",
+    "openRolesCount": "{count} vị trí đang tuyển | {count} vị trí đang tuyển",
+    "filteredOf": "{shown} trong {total}",
+    "totalCount": "Tổng {total}",
+    "searchPlaceholder": "Tìm vị trí",
+    "allLocations": "Tất cả địa điểm",
+    "allTypes": "Tất cả loại hình",
+    "clear": "Xóa",
+    "emptyTitle": "Không có vị trí nào đang tuyển",
+    "emptyBody": "Hiện không có vị trí nào đang tuyển. Vui lòng quay lại sau.",
+    "noMatchesTitle": "Không có vị trí nào khớp với bộ lọc của bạn",
+    "clearFilters": "Xóa bộ lọc",
+    "notFoundTitle": "Trang tuyển dụng không khả dụng",
+    "notFoundBody": "Công ty này hiện không có trang tuyển dụng công khai.",
+    "offlineTitle": "{name} hiện không nhận hồ sơ ứng tuyển",
+    "offlineBody": "Vui lòng quay lại sau.",
+    "posted": "Đăng ngày {date}",
+    "poweredBy": "Được cung cấp bởi",
+    "type": {
+      "full_time": "Toàn thời gian",
+      "part_time": "Bán thời gian",
+      "contract": "Hợp đồng",
+      "internship": "Thực tập"
+    },
+    "experience": {
+      "junior": "Junior",
+      "mid": "Trung cấp",
+      "senior": "Senior",
+      "lead": "Trưởng nhóm"
+    },
+    "remote": {
+      "remote": "Từ xa",
+      "hybrid": "Kết hợp",
+      "onsite": "Tại văn phòng"
+    }
+  },
+  "jobs": {
+    "list": {
+      "metaTitle": "Vị trí đang tuyển — Trang tuyển dụng",
+      "metaDescription": "Duyệt các vị trí đang tuyển trên Reqcore và ứng tuyển trực tiếp. Tìm cơ hội nghề nghiệp tiếp theo của bạn tại các công ty coi trọng sự minh bạch.",
+      "ogTitle": "Vị trí đang tuyển — Trang tuyển dụng Reqcore",
+      "ogDescription": "Duyệt các vị trí đang tuyển và ứng tuyển trực tiếp. Được vận hành bởi hệ thống ATS mã nguồn mở mà bạn thực sự sở hữu.",
+      "twitterDescription": "Duyệt các vị trí đang tuyển và ứng tuyển trực tiếp.",
+      "title": "Vị trí đang tuyển",
+      "subtitle": "Duyệt các vị trí đang tuyển hiện tại và tìm cơ hội tiếp theo của bạn.",
+      "searchPlaceholder": "Tìm vị trí theo chức danh hoặc địa điểm…",
+      "allTypes": "Tất cả loại hình",
+      "loading": "Đang tải danh sách vị trí…",
+      "errorLoad": "Không thể tải danh sách vị trí. Vui lòng thử lại.",
+      "retry": "Thử lại",
+      "emptyTitle": "Không có vị trí nào đang tuyển",
+      "emptyFiltered": "Không có vị trí nào khớp với bộ lọc hiện tại. Hãy thử điều chỉnh tìm kiếm của bạn.",
+      "emptyDefault": "Hiện không có vị trí nào đang tuyển. Vui lòng quay lại sau!",
+      "previous": "Trước",
+      "next": "Tiếp",
+      "pageOf": "Trang {page} / {total}",
+      "totalCount": "{count} vị trí đang tuyển | {count} vị trí đang tuyển"
+    },
+    "detail": {
+      "metaTitleFallback": "Chi tiết vị trí — Reqcore",
+      "metaDescriptionFallback": "Xem chi tiết vị trí và ứng tuyển",
+      "hiringNow": "Đang tuyển",
+      "metaApplyFor": "Ứng tuyển vị trí",
+      "metaAt": "tại",
+      "metaIn": "tại",
+      "notFoundTitle": "Không tìm thấy vị trí",
+      "notFoundBody": "Vị trí này có thể không còn khả dụng hoặc hiện không nhận hồ sơ ứng tuyển.",
+      "browseAll": "Xem tất cả vị trí",
+      "allPositions": "Tất cả vị trí",
+      "negotiable": "Có thể thương lượng",
+      "postedOn": "Đăng ngày {date}",
+      "applyNow": "Ứng tuyển ngay",
+      "applyTime": "Chỉ mất vài phút · Không cần tài khoản",
+      "seeAllRoles": "Xem tất cả vị trí đang tuyển tại {name}",
+      "careerPageTitle": "Cơ hội nghề nghiệp tại {name}",
+      "careerPageDescription": "Truy cập trang tuyển dụng của công ty và xem tất cả vị trí đang tuyển",
+      "companyLogoAlt": "Logo {name}",
+      "aboutRole": "Về vị trí này",
+      "questionsTitle": "Câu hỏi ứng tuyển",
+      "questionsIntro": "Bạn sẽ được yêu cầu trả lời {count} câu hỏi bổ sung khi ứng tuyển. | Bạn sẽ được yêu cầu trả lời {count} câu hỏi bổ sung khi ứng tuyển.",
+      "required": "Bắt buộc",
+      "readyTitle": "Sẵn sàng ứng tuyển?",
+      "readyBody": "Gửi hồ sơ ứng tuyển của bạn chỉ trong vài phút.",
+      "applyForPosition": "Ứng tuyển vị trí này"
+    },
+    "apply": {
+      "metaApplyPrefix": "Ứng tuyển",
+      "metaTitleFallback": "Ứng tuyển — Reqcore",
+      "metaDescriptionFallback": "Gửi hồ sơ ứng tuyển của bạn",
+      "notFoundTitle": "Không tìm thấy vị trí",
+      "notFoundBody": "Vị trí này có thể đã được tuyển hoặc không còn nhận hồ sơ ứng tuyển.",
+      "backHome": "Về trang chủ",
+      "backToDetails": "Quay lại chi tiết vị trí",
+      "genericError": "Đã xảy ra lỗi. Vui lòng thử lại.",
+      "validation": {
+        "firstNameRequired": "Vui lòng nhập tên",
+        "lastNameRequired": "Vui lòng nhập họ",
+        "emailRequired": "Vui lòng nhập email",
+        "emailInvalid": "Địa chỉ email không hợp lệ",
+        "phoneRequired": "Vui lòng nhập số điện thoại",
+        "resumeRequired": "Vui lòng đính kèm sơ yếu lý lịch/CV",
+        "coverLetterRequired": "Vui lòng nhập thư xin việc",
+        "coverLetterTooLong": "Thư xin việc tối đa 10.000 ký tự.",
+        "fileTooLarge": "Tệp quá lớn. Tối đa 10 MB.",
+        "fieldRequired": "Trường này là bắt buộc"
+      }
+    },
+    "confirmation": {
+      "metaTitle": "Đã gửi hồ sơ ứng tuyển — Reqcore",
+      "title": "Đã nhận hồ sơ ứng tuyển",
+      "thanksWithTitle": "Cảm ơn bạn đã ứng tuyển vị trí {title}. Đội ngũ tuyển dụng hiện đã nhận được thông tin của bạn.",
+      "thanksPlain": "Cảm ơn bạn đã ứng tuyển. Đội ngũ tuyển dụng hiện đã nhận được thông tin của bạn.",
+      "received": "Đã gửi thành công",
+      "backToCareerPage": "Quay lại trang tuyển dụng của {name}",
+      "browseMore": "Xem thêm vị trí khác",
+      "backHome": "Về trang chủ"
+    },
+    "form": {
+      "cardTitle": "Hồ sơ ứng tuyển của bạn",
+      "requiredHint": "Các trường có đánh dấu {mark} là bắt buộc.",
+      "firstName": "Tên",
+      "firstNamePlaceholder": "Lan",
+      "lastName": "Họ",
+      "lastNamePlaceholder": "Nguyễn",
+      "email": "Email",
+      "emailPlaceholder": "ban{'@'}vidu.com",
+      "phone": "Số điện thoại",
+      "optional": "(không bắt buộc)",
+      "phonePlaceholder": "+84 912 345 678",
+      "resume": "Sơ yếu lý lịch / CV",
+      "resumeHelp": "PDF, DOC hoặc DOCX — tối đa 10 MB",
+      "change": "Thay đổi",
+      "chooseFile": "Chọn tệp",
+      "coverLetter": "Thư xin việc",
+      "coverLetterPlaceholder": "Hãy cho chúng tôi biết vì sao bạn quan tâm đến vị trí này…",
+      "coverLetterMax": "Tối đa 10.000 ký tự.",
+      "additionalQuestions": "Câu hỏi bổ sung",
+      "submit": "Gửi hồ sơ ứng tuyển",
+      "submitting": "Đang gửi…",
+      "confidential": "Thông tin của bạn được bảo mật."
+    },
+    "question": {
+      "selectOption": "Chọn một tùy chọn…",
+      "yes": "Có",
+      "chooseFileHint": "Chọn tệp (PDF, DOC, DOCX — tối đa 10 MB)",
+      "urlPlaceholder": "https://…"
     }
   }
 }

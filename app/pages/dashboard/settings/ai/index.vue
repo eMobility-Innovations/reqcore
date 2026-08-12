@@ -7,7 +7,7 @@
  */
 import {
   Brain, Plus, Loader2, AlertTriangle, Sparkles, BarChart3, Star,
-  Pencil, Trash2, Zap, Check, KeyRound, Server,
+  Pencil, Trash2, Zap, Check, KeyRound, Server, Building2, Power,
 } from 'lucide-vue-next'
 
 definePageMeta({})
@@ -28,7 +28,9 @@ interface AiConfigRow {
   outputPricePer1m: number | null
   isDefaultChatbot: boolean
   isDefaultAnalysis: boolean
+  isEnabled?: boolean
   hasApiKey: boolean
+  source?: 'byok' | 'platform'
   createdAt?: string | Date
   updatedAt?: string | Date
 }
@@ -47,6 +49,11 @@ interface ProviderInfo {
 const { allowed: canManageAi, isLoading: isPermissionLoading } = usePermission({ scoring: ['create'] })
 const toast = useToast()
 
+// Bring-your-own AI key (adding a model) is available on every plan.
+const { hasFeature } = usePlanFeature()
+const canUseByok = computed(() => hasFeature('byok'))
+const canAddModel = computed(() => canManageAi.value && canUseByok.value)
+
 const { data: configsData, refresh: refreshConfigs, status: configsStatus } = useFetch<AiConfigRow[]>('/api/ai-config', {
   key: 'ai-configs',
   headers: useRequestHeaders(['cookie']),
@@ -58,7 +65,15 @@ const { data: providers } = useFetch<Record<string, ProviderInfo>>('/api/ai-conf
   headers: useRequestHeaders(['cookie']),
 })
 
-const configs = computed(() => configsData.value ?? [])
+// Pin the platform ("company") engine to the top — it's the always-present
+// default; BYOK models the org added follow.
+const configs = computed(() =>
+  [...(configsData.value ?? [])].sort((a, b) => {
+    const aPlatform = a.source === 'platform' ? 0 : 1
+    const bPlatform = b.source === 'platform' ? 0 : 1
+    return aPlatform - bPlatform
+  }),
+)
 const isLoading = computed(() => configsStatus.value === 'pending' && configs.value.length === 0)
 
 // ── Per-row actions ──
@@ -124,12 +139,52 @@ async function deleteConfig(c: AiConfigRow) {
   }
 }
 
+// The platform ("company") engine is never deleted — only toggled on/off.
+const togglingPlatformId = ref<string | null>(null)
+async function setPlatformEnabled(c: AiConfigRow, enabled: boolean) {
+  togglingPlatformId.value = c.id
+  try {
+    await $fetch(`/api/ai-config/${c.id}`, {
+      method: 'PATCH',
+      body: { isEnabled: enabled },
+      headers: useRequestHeaders(['cookie']),
+    })
+    toast.success(
+      enabled ? 'Reqcore AI enabled' : 'Reqcore AI disabled',
+      enabled ? 'It can now score candidates for this workspace.' : 'It will no longer be used for this workspace.',
+    )
+    await refreshConfigs()
+  } catch (err: any) {
+    const message = err?.data?.statusMessage ?? 'Failed to update.'
+    toast.error('Could not update', { message })
+  } finally {
+    togglingPlatformId.value = null
+  }
+}
+
 function providerLabel(key: string): string {
   return providers.value?.[key]?.name ?? key
+}
+function providerInitial(key: string): string {
+  return providerLabel(key).slice(0, 1).toUpperCase()
 }
 function formatPrice(p: number | null): string {
   if (p == null) return '—'
   return `$${p.toFixed(2)}`
+}
+function statusLabel(c: AiConfigRow): string {
+  if (c.source === 'platform' && c.isEnabled === false) return 'Paused'
+  if (!c.hasApiKey) return 'Needs key'
+  return 'Ready'
+}
+function statusClass(c: AiConfigRow): string {
+  if (c.source === 'platform' && c.isEnabled === false) {
+    return 'border-surface-200 dark:border-surface-700 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300'
+  }
+  if (!c.hasApiKey) {
+    return 'border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-950/50 text-danger-700 dark:text-danger-300'
+  }
+  return 'border-success-200 dark:border-success-800 bg-success-50 dark:bg-success-950/50 text-success-700 dark:text-success-300'
 }
 </script>
 
@@ -144,7 +199,7 @@ function formatPrice(p: number | null): string {
         </p>
       </div>
       <NuxtLink
-        v-if="canManageAi"
+        v-if="canAddModel"
         to="/dashboard/settings/ai/new"
         class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
       >
@@ -152,6 +207,9 @@ function formatPrice(p: number | null): string {
         Add a model
       </NuxtLink>
     </div>
+
+    <!-- Kept as a defensive server/UI mismatch fallback; BYOK should be available on every plan. -->
+    <FeatureLockCard v-if="canManageAi && !canUseByok" feature="byok" class="mb-6" />
 
     <!-- Permission guard -->
     <div v-if="isPermissionLoading" class="flex items-center justify-center py-12">
@@ -188,6 +246,7 @@ function formatPrice(p: number | null): string {
         Add your first model to enable the chatbot and candidate analysis. Pick from popular providers or bring your own OpenAI-compatible endpoint.
       </p>
       <NuxtLink
+        v-if="canAddModel"
         to="/dashboard/settings/ai/new"
         class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
       >
@@ -201,67 +260,133 @@ function formatPrice(p: number | null): string {
       <li
         v-for="c in configs"
         :key="c.id"
-        class="rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 overflow-hidden"
+        class="relative overflow-hidden rounded-xl border"
+        :class="c.source === 'platform'
+          ? 'border-brand-200/80 dark:border-brand-900/80 bg-brand-50/40 dark:bg-brand-950/20'
+          : 'border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900'"
       >
-        <div class="px-5 py-4 flex flex-col sm:flex-row sm:items-start gap-4">
+        <div
+          class="relative flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+          :class="{ 'opacity-60': c.source === 'platform' && c.isEnabled === false }"
+        >
           <!-- Identity -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="text-base font-semibold text-surface-900 dark:text-surface-100 truncate">{{ c.name }}</h3>
-              <span class="inline-flex items-center gap-1 rounded-full border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 px-2 py-0.5 text-[11px] font-medium text-surface-700 dark:text-surface-300">
-                {{ providerLabel(c.provider) }}
-              </span>
-              <span
-                v-if="c.isDefaultChatbot"
-                class="inline-flex items-center gap-1 rounded-full border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:text-brand-300"
-                title="Default for the chatbot"
-              >
-                <Sparkles class="size-3" /> Chatbot default
-              </span>
-              <span
-                v-if="c.isDefaultAnalysis"
-                class="inline-flex items-center gap-1 rounded-full border border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950/50 px-2 py-0.5 text-[11px] font-medium text-warning-700 dark:text-warning-300"
-                title="Default for candidate analysis"
-              >
-                <Star class="size-3" /> Analysis default
-              </span>
-              <span
-                v-if="!c.hasApiKey"
-                class="inline-flex items-center gap-1 rounded-full border border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-950/50 px-2 py-0.5 text-[11px] font-medium text-danger-700 dark:text-danger-300"
-              >
-                <AlertTriangle class="size-3" /> Missing API key
-              </span>
-            </div>
-            <div class="mt-1 flex items-center gap-2 flex-wrap text-xs text-surface-500">
-              <span class="font-mono">{{ c.model }}</span>
-              <span v-if="c.baseUrl" class="inline-flex items-center gap-1">
-                <Server class="size-3" />
-                <span class="font-mono truncate max-w-[260px]" :title="c.baseUrl">{{ c.baseUrl }}</span>
-              </span>
-              <span class="inline-flex items-center gap-1" title="Pricing per 1M tokens">
-                <BarChart3 class="size-3" />
-                {{ formatPrice(c.inputPricePer1m) }} in / {{ formatPrice(c.outputPricePer1m) }} out
-              </span>
+          <div class="flex min-w-0 items-start gap-3">
+            <div
+              class="relative flex size-10 shrink-0 items-center justify-center rounded-xl border text-xs font-semibold"
+              :class="c.source === 'platform'
+                ? 'border-brand-200 dark:border-brand-800 bg-white/85 dark:bg-surface-950/70 text-brand-700 dark:text-brand-300'
+                : 'border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 text-surface-700 dark:text-surface-200'"
+            >
+              <Brain v-if="c.source === 'platform'" class="size-5" />
+              <span v-else>{{ providerInitial(c.provider) }}</span>
             </div>
 
-            <div v-if="testResults[c.id]" class="mt-2">
-              <span
-                v-if="testResults[c.id]?.success"
-                class="inline-flex items-center gap-1 text-[11px] text-success-600 dark:text-success-400"
-              >
-                <Check class="size-3" /> Connection verified.
-              </span>
-              <span
-                v-else
-                class="inline-flex items-start gap-1 text-[11px] text-danger-600 dark:text-danger-400"
-              >
-                <AlertTriangle class="size-3 mt-px" /> {{ testResults[c.id]?.message }}
-              </span>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="truncate text-sm font-semibold text-surface-950 dark:text-surface-50">{{ c.name }}</h3>
+                <span
+                  class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                  :class="statusClass(c)"
+                >
+                  {{ statusLabel(c) }}
+                </span>
+                <span
+                  v-if="c.source === 'platform'"
+                  class="inline-flex items-center gap-1 rounded-full border border-brand-200 dark:border-brand-800 bg-white/70 dark:bg-brand-950/50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:text-brand-300"
+                >
+                  <Building2 class="size-3" /> Reqcore
+                </span>
+                <span
+                  v-if="c.isDefaultChatbot"
+                  class="inline-flex items-center gap-1 rounded-full border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:text-brand-300"
+                  title="Default for the chatbot"
+                >
+                  <Sparkles class="size-3" /> Chatbot
+                </span>
+                <span
+                  v-if="c.isDefaultAnalysis"
+                  class="inline-flex items-center gap-1 rounded-full border border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950/50 px-2 py-0.5 text-[11px] font-medium text-warning-700 dark:text-warning-300"
+                  title="Default for candidate analysis"
+                >
+                  <Star class="size-3" /> Analysis
+                </span>
+              </div>
+
+              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-surface-500 dark:text-surface-400">
+                <span>{{ providerLabel(c.provider) }}</span>
+                <span class="font-mono">{{ c.model }}</span>
+                <span v-if="c.baseUrl" class="inline-flex min-w-0 items-center gap-1">
+                  <Server class="size-3" />
+                  <span class="max-w-[220px] truncate font-mono" :title="c.baseUrl">{{ c.baseUrl }}</span>
+                </span>
+                <span class="inline-flex items-center gap-1" title="Pricing per 1M tokens">
+                  <BarChart3 class="size-3" />
+                  {{ formatPrice(c.inputPricePer1m) }} / {{ formatPrice(c.outputPricePer1m) }}
+                </span>
+              </div>
+
+              <div v-if="testResults[c.id] || !c.hasApiKey" class="mt-1.5 text-[11px]">
+                <span
+                  v-if="testResults[c.id]?.success"
+                  class="inline-flex items-center gap-1 text-success-600 dark:text-success-400"
+                >
+                  <Check class="size-3" /> Connection verified.
+                </span>
+                <span
+                  v-else-if="testResults[c.id]"
+                  class="inline-flex items-start gap-1 text-danger-600 dark:text-danger-400"
+                >
+                  <AlertTriangle class="mt-px size-3" /> {{ testResults[c.id]?.message }}
+                </span>
+                <span v-else class="inline-flex items-center gap-1 text-danger-600 dark:text-danger-400">
+                  <AlertTriangle class="size-3" /> Missing API key.
+                </span>
+              </div>
             </div>
           </div>
 
-          <!-- Actions -->
-          <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+          <!-- Actions: platform ("company") engine — never edited or deleted, only toggled -->
+          <div v-if="c.source === 'platform'" class="flex flex-wrap items-center gap-1.5 shrink-0">
+            <button
+              v-if="c.isEnabled !== false && !c.isDefaultAnalysis"
+              :disabled="togglingDefaultId === c.id && togglingPurpose === 'analysis'"
+              class="inline-flex items-center gap-1 rounded-lg border border-surface-200 dark:border-surface-700 bg-white/85 dark:bg-surface-800 px-2.5 py-1.5 text-xs font-medium text-surface-700 dark:text-surface-300 hover:border-warning-300 dark:hover:border-warning-700 hover:text-warning-700 dark:hover:text-warning-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              title="Use this engine for candidate analysis"
+              @click="setDefault(c, 'analysis')"
+            >
+              <Loader2 v-if="togglingDefaultId === c.id && togglingPurpose === 'analysis'" class="size-3.5 animate-spin" />
+              <Star v-else class="size-3.5" />
+              Use for analysis
+            </button>
+
+            <button
+              v-if="c.isEnabled !== false"
+              :disabled="testingId === c.id || !c.hasApiKey"
+              class="inline-flex items-center gap-1 rounded-lg border border-surface-200 dark:border-surface-700 bg-white/85 dark:bg-surface-800 px-2.5 py-1.5 text-xs font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              @click="testConnection(c)"
+            >
+              <Loader2 v-if="testingId === c.id" class="size-3.5 animate-spin" />
+              <Zap v-else class="size-3.5" />
+              Test
+            </button>
+
+            <button
+              :disabled="togglingPlatformId === c.id"
+              class="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              :class="c.isEnabled === false
+                ? 'border-brand-300 dark:border-brand-700 bg-brand-600 text-white hover:bg-brand-700'
+                : 'border-surface-200 dark:border-surface-700 bg-white/85 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:border-danger-300 dark:hover:border-danger-700 hover:text-danger-600 dark:hover:text-danger-400'"
+              :title="c.isEnabled === false ? 'Enable Reqcore AI for this workspace' : 'Disable Reqcore AI for this workspace'"
+              @click="setPlatformEnabled(c, c.isEnabled === false)"
+            >
+              <Loader2 v-if="togglingPlatformId === c.id" class="size-3.5 animate-spin" />
+              <Power v-else class="size-3.5" />
+              {{ c.isEnabled === false ? 'Enable' : 'Disable' }}
+            </button>
+          </div>
+
+          <!-- Actions: bring-your-own-key models -->
+          <div v-else class="flex flex-wrap items-center gap-1.5 shrink-0">
             <button
               v-if="!c.isDefaultChatbot"
               :disabled="!c.hasApiKey || (togglingDefaultId === c.id && togglingPurpose === 'chatbot')"
@@ -307,6 +432,7 @@ function formatPrice(p: number | null): string {
             <button
               :disabled="deletingId === c.id"
               class="inline-flex items-center gap-1 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 px-2.5 py-1.5 text-xs font-medium text-danger-600 dark:text-danger-400 hover:border-danger-300 dark:hover:border-danger-700 hover:bg-danger-50 dark:hover:bg-danger-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              title="Delete model"
               @click="deleteConfig(c)"
             >
               <Loader2 v-if="deletingId === c.id" class="size-3.5 animate-spin" />

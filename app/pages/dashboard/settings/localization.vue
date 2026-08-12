@@ -94,6 +94,19 @@ const previewDateFormatted = computed(() => {
       </div>
 
       <div class="px-4 sm:px-6 py-5 space-y-6">
+        <!-- Interface language -->
+        <div>
+          <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+            Interface language
+          </label>
+          <p class="text-xs text-surface-400 dark:text-surface-500 mb-3">
+            Switch the language used in Reqcore. Your current language is shown in the selector.
+          </p>
+          <div class="inline-flex">
+            <LanguageSwitcher show-name prominent align="left" />
+          </div>
+        </div>
+
         <!-- Name display format -->
         <div>
           <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">

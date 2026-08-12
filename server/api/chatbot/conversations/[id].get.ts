@@ -1,4 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm'
+import { z } from 'zod'
 import { chatbotConversation, chatbotMessage } from '../../../database/schema'
 import { requireChatbotAccess } from '../../../utils/chatbotAccess'
 import type {
@@ -17,8 +18,7 @@ export default defineEventHandler(async (event): Promise<{ conversation: Chatbot
   const session = await requireChatbotAccess(event)
   const orgId = session.session.activeOrganizationId
   const userId = session.user.id
-  const id = getRouterParam(event, 'id')
-  if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing id.' })
+  const { id } = await getValidatedRouterParams(event, z.object({ id: z.string().uuid() }).parse)
 
   const conv = await db.query.chatbotConversation.findFirst({
     where: and(

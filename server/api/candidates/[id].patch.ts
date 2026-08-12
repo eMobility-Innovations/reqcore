@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import { candidate } from '../../database/schema'
 import { candidateIdParamSchema, updateCandidateSchema } from '../../utils/schemas/candidate'
 
@@ -29,7 +29,11 @@ export default defineEventHandler(async (event) => {
 
   const [updated] = await db.update(candidate)
     .set({ ...body, updatedAt: new Date() })
-    .where(and(eq(candidate.id, id), eq(candidate.organizationId, orgId)))
+    .where(and(
+      eq(candidate.id, id),
+      eq(candidate.organizationId, orgId),
+      isNull(candidate.quarantinedAt),
+    ))
     .returning({
       id: candidate.id,
       firstName: candidate.firstName,
@@ -45,7 +49,7 @@ export default defineEventHandler(async (event) => {
     })
 
   if (!updated) {
-    throw createError({ statusCode: 404, statusMessage: 'Not found' })
+    throw createError({ statusCode: 409, statusMessage: 'Candidate is quarantined or not found' })
   }
 
   recordActivity({

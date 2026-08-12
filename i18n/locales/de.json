@@ -8,6 +8,7 @@
   "home": {
     "nav": {
       "features": "Funktionen",
+      "pricing": "Preise",
       "openPositions": "Offene Stellen",
       "roadmap": "Roadmap",
       "blog": "Blog",
@@ -16,35 +17,249 @@
       "logIn": "Anmelden",
       "signUp": "Registrieren"
     },
-    "badge": "Open-Source-ATS für Entwicklerteams",
+    "badge": "Hosted ATS for modern hiring teams",
     "hero": {
-      "titleLine1": "Ihr Recruiting.",
-      "titleHighlight": "Ihre Infrastruktur.",
-      "subtitle": "Open-Source-Bewerbermanagement für Teams, die selbst hosten.",
+      "titleLine1": "Hiring software",
+      "titleHighlight": "that starts free.",
+      "subtitle": "Track your first role in Reqcore with 1 active job and 300 applicants free. Upgrade only when your hiring pipeline grows.",
       "goToDashboard": "Zum Dashboard",
       "signIn": "Anmelden",
       "createAccount": "Konto erstellen",
       "ctaDemo": "Live-Demo testen",
-      "ctaStart": "Auf GitHub ansehen",
-      "hint": "Frühe Open-Source-Version — testen Sie die Demo mit Beispieldaten, ohne Registrierung"
+      "ctaStart": "Start free",
+      "hint": "Try the demo with sample data, no sign-up needed"
     },
     "pillars": {
       "yourData": {
-        "label": "Ihre Daten",
-        "desc": "Postgres + MinIO auf Ihrer Infrastruktur. Nichts verlässt Ihr Netzwerk."
+        "label": "One free active job",
+        "desc": "Run a real hiring process before you pay. No credit card needed."
       },
       "auditable": {
-        "label": "Vollständig auditierbar",
-        "desc": "Open Source — jede Zeile der Matching-Logik ist sichtbar und anpassbar."
+        "label": "300 applicants included",
+        "desc": "Enough room to test sourcing, screening, and pipeline flow on a real role."
       },
       "unlimitedSeats": {
         "label": "Unbegrenzte Plätze",
-        "desc": "Fügen Sie Ihr gesamtes Recruiting-Team hinzu. Kein Preis pro Platz, nie."
+        "desc": "Add your hiring team without turning every collaborator into another seat charge."
       }
     },
     "footer": {
-      "source": "Quellcode",
-      "tagline": "Reqcore — Open-Source-Bewerbermanagement"
+      "source": "Pricing",
+      "tagline": "Reqcore — applicant tracking that starts free"
+    }
+  },
+  "retention": {
+    "title": "Datenschutz & Aufbewahrung",
+    "description": "Datenschutzhinweise konfigurieren und Bewerberdaten nach Ablauf der Aufbewahrungsfrist automatisch entfernen.",
+    "policy": {
+      "title": "Aufbewahrungsrichtlinie",
+      "description": "Gemessen ab der letzten Aktivität im Bewerbungsverfahren.",
+      "enable": "Automatische Aufbewahrung aktivieren",
+      "enableHelp": "Abgelaufene Bewerber werden vor der endgültigen Löschung in Quarantäne verschoben. Bestehende Daten erhalten zunächst eine Prüffrist.",
+      "months": "Aufbewahrungsfrist (Monate)",
+      "quarantineDays": "Quarantänefrist (Tage)",
+      "quarantineHelp": "Wiederherstellbare Schonfrist vor der endgültigen Löschung."
+    },
+    "privacy": {
+      "title": "Datenschutzhinweis im Bewerbungsformular",
+      "description": "Wird Bewerbern im öffentlichen Bewerbungsformular angezeigt.",
+      "url": "URL der Datenschutzerklärung",
+      "email": "Datenschutz-Kontaktadresse",
+      "text": "Hinweistext (optional)",
+      "defaultNotice": "Mit Ihrer Bewerbung stimmen Sie zu, dass {organization} Ihre Bewerbungsdaten zur Beurteilung Ihrer Bewerbung verarbeitet. Ihre Daten werden nur so lange wie nötig gespeichert und anschließend gelöscht.",
+      "thisOrganization": "diese Organisation",
+      "policyLink": "Datenschutzerklärung",
+      "contactLabel": "Kontakt"
+    },
+    "save": {
+      "button": "Änderungen speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Gespeichert!",
+      "permission": "Nur Administratoren und Eigentümer können diese Einstellungen ändern."
+    },
+    "review": {
+      "title": "Bevorstehende Löschungen",
+      "description": "Bewerber, deren Frist abläuft, die in Quarantäne sind oder ausgenommen wurden.",
+      "instanceDisabled": "Die automatische Bereinigung wurde vom Instanzadministrator pausiert. Richtlinien und Prüfdaten bleiben unverändert.",
+      "loading": "Wird geladen…",
+      "empty": "Keine Prüfung erforderlich. Keine Bewerber nähern sich ihrer Aufbewahrungsgrenze.",
+      "expires": "Läuft am {date} ab",
+      "erases": "Löschung am {date}",
+      "exemptUntil": "Ausgenommen bis {date}"
+    },
+    "status": {
+      "expiring": "Läuft bald ab",
+      "expired": "Abgelaufen",
+      "quarantined": "In Quarantäne",
+      "exempt": "Ausgenommen"
+    },
+    "actions": {
+      "export": "Daten exportieren",
+      "restore": "Wiederherstellen",
+      "hold": "Rechtliche Sperre hinzufügen",
+      "clearHold": "Rechtliche Sperre aufheben",
+      "erase": "Jetzt löschen",
+      "holdPrompt": "Grund für die rechtliche Sperre (z. B. ein laufender Rechtsstreit):",
+      "eraseConfirm": "{name} und alle zugehörigen Daten endgültig löschen? Dies kann nicht rückgängig gemacht werden."
+    },
+    "errors": {
+      "save": "Einstellungen konnten nicht gespeichert werden",
+      "restore": "Bewerber konnte nicht wiederhergestellt werden",
+      "hold": "Rechtliche Sperre konnte nicht hinzugefügt werden",
+      "clearHold": "Rechtliche Sperre konnte nicht aufgehoben werden",
+      "erase": "Bewerber konnte nicht gelöscht werden"
+    }
+  },
+  "career": {
+    "eyebrow": "Karriere",
+    "metaTitle": "{name} — Karriere",
+    "openRoles": "Offene Stellen",
+    "headlineWithName": "Offene Stellen bei {name}",
+    "openRolesCount": "{count} offene Stelle | {count} offene Stellen",
+    "filteredOf": "{shown} von {total}",
+    "totalCount": "{total} insgesamt",
+    "searchPlaceholder": "Stellen suchen",
+    "allLocations": "Alle Standorte",
+    "allTypes": "Alle Typen",
+    "clear": "Zurücksetzen",
+    "emptyTitle": "Keine offenen Stellen",
+    "emptyBody": "Derzeit gibt es keine offenen Stellen. Schauen Sie bald wieder vorbei.",
+    "noMatchesTitle": "Keine Stellen entsprechen Ihren Filtern",
+    "clearFilters": "Filter zurücksetzen",
+    "notFoundTitle": "Karriereseite nicht verfügbar",
+    "notFoundBody": "Dieses Unternehmen hat derzeit keine öffentliche Karriereseite.",
+    "offlineTitle": "{name} nimmt derzeit keine Bewerbungen an",
+    "offlineBody": "Bitte schauen Sie später wieder vorbei.",
+    "posted": "Veröffentlicht am {date}",
+    "poweredBy": "Bereitgestellt von",
+    "type": {
+      "full_time": "Vollzeit",
+      "part_time": "Teilzeit",
+      "contract": "Auf Vertragsbasis",
+      "internship": "Praktikum"
+    },
+    "experience": {
+      "junior": "Junior",
+      "mid": "Mittlere Ebene",
+      "senior": "Senior",
+      "lead": "Lead"
+    },
+    "remote": {
+      "remote": "Remote",
+      "hybrid": "Hybrid",
+      "onsite": "Vor Ort"
+    }
+  },
+  "jobs": {
+    "list": {
+      "metaTitle": "Offene Stellen — Stellenbörse",
+      "metaDescription": "Durchsuchen Sie offene Stellen bei Reqcore und bewerben Sie sich direkt. Finden Sie Ihre nächste Karrierechance bei Unternehmen, die Transparenz schätzen.",
+      "ogTitle": "Offene Stellen — Reqcore Stellenbörse",
+      "ogDescription": "Durchsuchen Sie offene Stellen und bewerben Sie sich direkt. Unterstützt durch das Open-Source-ATS, das Ihnen wirklich gehört.",
+      "twitterDescription": "Durchsuchen Sie offene Stellen und bewerben Sie sich direkt.",
+      "title": "Offene Stellen",
+      "subtitle": "Durchsuchen Sie unsere aktuellen offenen Stellen und finden Sie Ihre nächste Chance.",
+      "searchPlaceholder": "Stellen nach Titel oder Standort suchen…",
+      "allTypes": "Alle Typen",
+      "loading": "Stellen werden geladen…",
+      "errorLoad": "Stellen konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
+      "retry": "Erneut versuchen",
+      "emptyTitle": "Keine offenen Stellen",
+      "emptyFiltered": "Keine Stellen entsprechen Ihren aktuellen Filtern. Passen Sie Ihre Suche an.",
+      "emptyDefault": "Derzeit gibt es keine offenen Stellen. Schauen Sie bald wieder vorbei!",
+      "previous": "Zurück",
+      "next": "Weiter",
+      "pageOf": "Seite {page} von {total}",
+      "totalCount": "{count} offene Stelle | {count} offene Stellen"
+    },
+    "detail": {
+      "metaTitleFallback": "Stellendetails — Reqcore",
+      "metaDescriptionFallback": "Stellendetails ansehen und bewerben",
+      "hiringNow": "Wir stellen ein",
+      "metaApplyFor": "Bewerben Sie sich für",
+      "metaAt": "bei",
+      "metaIn": "in",
+      "notFoundTitle": "Stelle nicht gefunden",
+      "notFoundBody": "Diese Stelle ist möglicherweise nicht mehr verfügbar oder nimmt derzeit keine Bewerbungen an.",
+      "browseAll": "Alle Stellen durchsuchen",
+      "allPositions": "Alle Stellen",
+      "negotiable": "Verhandelbar",
+      "postedOn": "Veröffentlicht am {date}",
+      "applyNow": "Jetzt bewerben",
+      "applyTime": "Dauert nur wenige Minuten · Kein Konto erforderlich",
+      "seeAllRoles": "Alle offenen Stellen bei {name} ansehen",
+      "careerPageTitle": "Karriere bei {name}",
+      "careerPageDescription": "Unternehmenskarriereseite besuchen und alle offenen Stellen ansehen",
+      "companyLogoAlt": "Logo von {name}",
+      "aboutRole": "Über diese Stelle",
+      "questionsTitle": "Bewerbungsfragen",
+      "questionsIntro": "Sie werden gebeten, {count} zusätzliche Frage zu beantworten, wenn Sie sich bewerben. | Sie werden gebeten, {count} zusätzliche Fragen zu beantworten, wenn Sie sich bewerben.",
+      "required": "Erforderlich",
+      "readyTitle": "Bereit, sich zu bewerben?",
+      "readyBody": "Reichen Sie Ihre Bewerbung in nur wenigen Minuten ein.",
+      "applyForPosition": "Für diese Stelle bewerben"
+    },
+    "apply": {
+      "metaApplyPrefix": "Bewerbung",
+      "metaTitleFallback": "Bewerben — Reqcore",
+      "metaDescriptionFallback": "Reichen Sie Ihre Bewerbung ein",
+      "notFoundTitle": "Stelle nicht gefunden",
+      "notFoundBody": "Diese Stelle wurde möglicherweise bereits besetzt oder nimmt keine Bewerbungen mehr an.",
+      "backHome": "Zurück zur Startseite",
+      "backToDetails": "Zurück zu den Stellendetails",
+      "genericError": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+      "validation": {
+        "firstNameRequired": "Vorname ist erforderlich",
+        "lastNameRequired": "Nachname ist erforderlich",
+        "emailRequired": "E-Mail-Adresse ist erforderlich",
+        "emailInvalid": "Ungültige E-Mail-Adresse",
+        "phoneRequired": "Telefonnummer ist erforderlich",
+        "resumeRequired": "Lebenslauf ist erforderlich",
+        "coverLetterRequired": "Anschreiben ist erforderlich",
+        "coverLetterTooLong": "Das Anschreiben darf höchstens 10.000 Zeichen umfassen.",
+        "fileTooLarge": "Datei zu groß. Maximal 10 MB.",
+        "fieldRequired": "Dieses Feld ist erforderlich"
+      }
+    },
+    "confirmation": {
+      "metaTitle": "Bewerbung eingereicht — Reqcore",
+      "title": "Bewerbung eingegangen",
+      "thanksWithTitle": "Vielen Dank für Ihre Bewerbung auf {title}. Ihre Angaben liegen nun dem Einstellungsteam vor.",
+      "thanksPlain": "Vielen Dank für Ihre Bewerbung. Ihre Angaben liegen nun dem Einstellungsteam vor.",
+      "received": "Erfolgreich gesendet",
+      "backToCareerPage": "Zurück zur Karriereseite von {name}",
+      "browseMore": "Weitere Stellen durchsuchen",
+      "backHome": "Zurück zur Startseite"
+    },
+    "form": {
+      "cardTitle": "Ihre Bewerbung",
+      "requiredHint": "Mit {mark} markierte Felder sind erforderlich.",
+      "firstName": "Vorname",
+      "firstNamePlaceholder": "Anna",
+      "lastName": "Nachname",
+      "lastNamePlaceholder": "Muster",
+      "email": "E-Mail",
+      "emailPlaceholder": "sie{'@'}beispiel.de",
+      "phone": "Telefon",
+      "optional": "(optional)",
+      "phonePlaceholder": "+49 30 12345678",
+      "resume": "Lebenslauf",
+      "resumeHelp": "PDF, DOC oder DOCX — max. 10 MB",
+      "change": "Ändern",
+      "chooseFile": "Datei auswählen",
+      "coverLetter": "Anschreiben",
+      "coverLetterPlaceholder": "Erzählen Sie uns, warum Sie sich für diese Stelle interessieren…",
+      "coverLetterMax": "Maximal 10.000 Zeichen.",
+      "additionalQuestions": "Zusätzliche Fragen",
+      "submit": "Bewerbung absenden",
+      "submitting": "Wird gesendet…",
+      "confidential": "Ihre Angaben werden vertraulich behandelt."
+    },
+    "question": {
+      "selectOption": "Option auswählen…",
+      "yes": "Ja",
+      "chooseFileHint": "Datei auswählen (PDF, DOC, DOCX — max. 10 MB)",
+      "urlPlaceholder": "https://…"
     }
   }
 }
