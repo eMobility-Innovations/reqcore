@@ -1,0 +1,1 @@
+ALTER TABLE "job" ADD COLUMN "analysis_context" jsonb DEFAULT '{"coverLetter":true,"screeningAnswers":true,"recruiterNotes":false}'::jsonb NOT NULL;

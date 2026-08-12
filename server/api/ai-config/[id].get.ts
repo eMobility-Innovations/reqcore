@@ -1,6 +1,12 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { aiConfig } from '../../database/schema'
+import {
+  canUsePlatformAi,
+  getPlatformAiOverride,
+  PLATFORM_AI_CONFIG_ID,
+  toPlatformAiConfigListRow,
+} from '../../utils/ai/platformConfig'
 
 const paramsSchema = z.object({ id: z.string().min(1) })
 
@@ -11,6 +17,13 @@ export default defineEventHandler(async (event) => {
   const session = await requirePermission(event, { scoring: ['read'] })
   const orgId = session.session.activeOrganizationId
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse)
+
+  if (id === PLATFORM_AI_CONFIG_ID) {
+    if (!await canUsePlatformAi(orgId)) {
+      throw createError({ statusCode: 404, statusMessage: 'AI configuration not found.' })
+    }
+    return toPlatformAiConfigListRow(await getPlatformAiOverride(orgId))
+  }
 
   const row = await db.query.aiConfig.findFirst({
     where: and(eq(aiConfig.id, id), eq(aiConfig.organizationId, orgId)),
@@ -38,5 +51,6 @@ export default defineEventHandler(async (event) => {
     inputPricePer1m: rest.inputPricePer1m != null ? Number(rest.inputPricePer1m) : null,
     outputPricePer1m: rest.outputPricePer1m != null ? Number(rest.outputPricePer1m) : null,
     hasApiKey: Boolean(apiKeyEncrypted),
+    source: 'byok' as const,
   }
 })

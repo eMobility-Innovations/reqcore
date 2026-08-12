@@ -1,15 +1,17 @@
 import { eq, and } from 'drizzle-orm'
 import {
   application, scoringCriterion, criterionScore,
-  analysisRun, document, candidate,
+  analysisRun, document,
 } from '../../../database/schema'
-import { scoreApplication, computeCompositeScore } from '../../../utils/ai/scoring'
+import { scoreApplication, computeCompositeScore, hasScorableCandidateMaterial } from '../../../utils/ai/scoring'
 import type { CriterionDefinition } from '../../../utils/ai/scoring'
 import { resolveAnalysisProvider } from '../../../utils/ai/resolveProvider'
 import { assertPlatformBudget, BudgetExceededError, budgetErrorToHttp } from '../../../utils/ai/budget'
 import { computeCostUsdMicros } from '../../../utils/ai/pricing'
 import { captureAiGeneration } from '../../../utils/ai/observability'
 import { extractResumeText } from '../../../utils/resume-parser'
+import { fetchScreeningAnswers, DEFAULT_ANALYSIS_CONTEXT } from '../../../utils/ai/analysisContext'
+import { parseAndPersistDocument } from '../../../utils/document-parser'
 import { createRateLimiter } from '../../../utils/rateLimit'
 import { z } from 'zod'
 
@@ -42,7 +44,7 @@ export default defineEventHandler(async (event) => {
         columns: { id: true, firstName: true, lastName: true },
       },
       job: {
-        columns: { id: true, title: true, description: true },
+        columns: { id: true, title: true, description: true, analysisContext: true },
       },
     },
   })
@@ -71,6 +73,8 @@ export default defineEventHandler(async (event) => {
   // Fetch candidate documents (resume text)
   const docs = await db.select({
     id: document.id,
+    storageKey: document.storageKey,
+    mimeType: document.mimeType,
     parsedContent: document.parsedContent,
     type: document.type,
   })
@@ -81,21 +85,19 @@ export default defineEventHandler(async (event) => {
     ))
 
   const resumeDoc = docs.find(d => d.type === 'resume')
-  const resumeText = extractResumeText(resumeDoc?.parsedContent)
+  let resumeText = extractResumeText(resumeDoc?.parsedContent)
 
-  if (!resumeText) {
-    // Resume document exists but parsing failed or was incomplete
-    if (resumeDoc) {
-      throw createError({
-        statusCode: 422,
-        statusMessage: 'Resume was uploaded but text extraction failed. Try re-parsing the document.',
-        data: { code: 'PARSE_FAILED', documentId: resumeDoc.id },
+  if (!resumeText && resumeDoc) {
+    try {
+      const parsedContent = await parseAndPersistDocument(resumeDoc)
+      resumeText = extractResumeText(parsedContent)
+    } catch (err) {
+      logWarn('application_analysis.resume_reparse_failed', {
+        application_id: applicationId,
+        document_id: resumeDoc.id,
+        error_message: err instanceof Error ? err.message : String(err),
       })
     }
-    throw createError({
-      statusCode: 422,
-      statusMessage: 'No resume found for this candidate. Upload a resume first.',
-    })
   }
 
   if (!app.job.description) {
@@ -125,6 +127,32 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Resume is included when available; the job controls the other evidence sources.
+  const analysisContext = app.job.analysisContext ?? DEFAULT_ANALYSIS_CONTEXT
+  const screeningAnswers = analysisContext.screeningAnswers
+    ? await fetchScreeningAnswers(applicationId, orgId)
+    : null
+  const materials = {
+    resumeText,
+    coverLetterText: analysisContext.coverLetter ? app.coverLetterText : null,
+    applicationNotes: analysisContext.recruiterNotes ? app.notes : null,
+    screeningAnswers,
+  }
+
+  if (!hasScorableCandidateMaterial(materials)) {
+    if (resumeDoc) {
+      throw createError({
+        statusCode: 422,
+        statusMessage: 'No usable candidate material found. Resume text extraction failed and the other enabled sources are empty.',
+        data: { code: 'PARSE_FAILED', documentId: resumeDoc.id },
+      })
+    }
+    throw createError({
+      statusCode: 422,
+      statusMessage: 'No usable candidate material found. Add a resume, cover letter, screening response, or enabled recruiter note.',
+    })
+  }
+
   const startedAt = Date.now()
   let result
   try {
@@ -132,9 +160,7 @@ export default defineEventHandler(async (event) => {
       jobTitle: app.job.title,
       jobDescription: app.job.description,
       criteria: criteriaDefinitions,
-      resumeText,
-      coverLetterText: app.coverLetterText,
-      applicationNotes: app.notes,
+      ...materials,
     })
   } catch (err: any) {
     // Record failed analysis run

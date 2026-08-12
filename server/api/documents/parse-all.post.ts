@@ -1,6 +1,6 @@
 import { eq, and, isNull } from 'drizzle-orm'
 import { document } from '../../database/schema'
-import { parseDocument } from '../../utils/resume-parser'
+import { parseAndPersistDocument } from '../../utils/document-parser'
 
 /**
  * POST /api/documents/parse-all
@@ -39,13 +39,9 @@ export default defineEventHandler(async (event) => {
 
   for (const doc of unparsedDocs) {
     try {
-      const fileBuffer = await downloadFromS3(doc.storageKey)
-      const parsedContent = await parseDocument(fileBuffer, doc.mimeType)
+      const parsedContent = await parseAndPersistDocument(doc)
 
       if (parsedContent) {
-        await db.update(document)
-          .set({ parsedContent: parsedContent as any })
-          .where(eq(document.id, doc.id))
         parsed++
       }
       else {

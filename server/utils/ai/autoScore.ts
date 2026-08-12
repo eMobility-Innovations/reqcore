@@ -1,27 +1,28 @@
 /**
  * Fire-and-forget AI scoring for a single application.
  * Called when autoScoreOnApply is enabled on a job.
- * Silently skips if AI config, criteria, or resume are missing.
+ * Silently skips if AI config, criteria, or candidate material are missing.
  */
 import { eq, and } from 'drizzle-orm'
 import {
   application, scoringCriterion, criterionScore,
   analysisRun, document,
 } from '../../database/schema'
-import { scoreApplication, computeCompositeScore } from './scoring'
+import { scoreApplication, computeCompositeScore, hasScorableCandidateMaterial } from './scoring'
 import type { CriterionDefinition } from './scoring'
 import { resolveAnalysisProvider } from './resolveProvider'
 import { assertPlatformBudget } from './budget'
 import { computeCostUsdMicros } from './pricing'
 import { captureAiGeneration } from './observability'
 import { extractResumeText } from '../resume-parser'
+import { fetchScreeningAnswers, DEFAULT_ANALYSIS_CONTEXT } from './analysisContext'
 
 export async function autoScoreApplication(applicationId: string, orgId: string) {
   const app = await db.query.application.findFirst({
     where: and(eq(application.id, applicationId), eq(application.organizationId, orgId)),
     with: {
       candidate: { columns: { id: true, firstName: true, lastName: true } },
-      job: { columns: { id: true, title: true, description: true } },
+      job: { columns: { id: true, title: true, description: true, analysisContext: true } },
     },
   })
   if (!app) return
@@ -56,7 +57,6 @@ export async function autoScoreApplication(applicationId: string, orgId: string)
 
   const resumeDoc = docs.find(d => d.type === 'resume')
   const resumeText = extractResumeText(resumeDoc?.parsedContent)
-  if (!resumeText) return
 
   if (!app.job.description) return
 
@@ -69,6 +69,18 @@ export async function autoScoreApplication(applicationId: string, orgId: string)
     weight: c.weight,
   }))
 
+  const analysisContext = app.job.analysisContext ?? DEFAULT_ANALYSIS_CONTEXT
+  const screeningAnswers = analysisContext.screeningAnswers
+    ? await fetchScreeningAnswers(applicationId, orgId)
+    : null
+  const materials = {
+    resumeText,
+    coverLetterText: analysisContext.coverLetter ? app.coverLetterText : null,
+    applicationNotes: analysisContext.recruiterNotes ? app.notes : null,
+    screeningAnswers,
+  }
+  if (!hasScorableCandidateMaterial(materials)) return
+
   const startedAt = Date.now()
   let result
   try {
@@ -76,9 +88,7 @@ export async function autoScoreApplication(applicationId: string, orgId: string)
       jobTitle: app.job.title,
       jobDescription: app.job.description,
       criteria: criteriaDefinitions,
-      resumeText,
-      coverLetterText: app.coverLetterText,
-      applicationNotes: app.notes,
+      ...materials,
     })
   } catch (err: any) {
     await db.insert(analysisRun).values({

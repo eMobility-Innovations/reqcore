@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   Share2,
   Globe,
+  Globe2,
   Mail,
   Users,
   BarChart3,
@@ -654,6 +655,35 @@ async function copyApplicationLink() {
     }, 2000)
   } catch {
     // ignore clipboard issues silently
+  }
+}
+
+// ─────────────────────────────────────────────
+// Career page integration (Step 4)
+// A published role is automatically listed on the org's branded career page.
+// Surface that page as the primary distribution destination.
+// ─────────────────────────────────────────────
+const { hasFeature: hasPlanFeature } = usePlanFeature()
+const { activeOrg } = useCurrentOrg()
+const canUseCareerPage = computed(() => hasPlanFeature('careerPage'))
+const careerPagePath = computed(() => {
+  const slug = activeOrg.value?.slug
+  return slug ? localePath(`/career/${slug}`) : ''
+})
+const careerPageUrl = computed(() => {
+  if (!careerPagePath.value) return ''
+  return `${requestUrl.protocol}//${requestUrl.host}${careerPagePath.value}`
+})
+const careerPageLinkCopied = ref(false)
+
+async function copyCareerPageLink() {
+  if (!careerPageUrl.value) return
+  try {
+    await navigator.clipboard.writeText(careerPageUrl.value)
+    careerPageLinkCopied.value = true
+    setTimeout(() => { careerPageLinkCopied.value = false }, 2500)
+  } catch {
+    toast.info(careerPageUrl.value)
   }
 }
 
@@ -1412,6 +1442,69 @@ const typeOptions = [
                       {{ linkCopiedFinal ? 'Copied!' : 'Copy' }}
                     </button>
                   </div>
+                </div>
+
+                <!-- Career page — primary distribution destination -->
+                <div
+                  v-if="canUseCareerPage && careerPageUrl"
+                  class="rounded-xl border border-brand-200 dark:border-brand-800 bg-brand-50/60 dark:bg-brand-950/20 p-5"
+                >
+                  <div class="flex items-center gap-2 mb-1">
+                    <Globe2 class="size-4 text-brand-600 dark:text-brand-400" />
+                    <span class="text-sm font-semibold text-surface-900 dark:text-surface-100">Your career page</span>
+                    <span class="text-xs text-surface-400 dark:text-surface-500">— this role is already listed there</span>
+                  </div>
+                  <p class="text-sm text-surface-500 dark:text-surface-400 mb-3">
+                    Share one branded link instead of pasting job ads everywhere. All your open roles live here.
+                  </p>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readonly
+                      :value="careerPageUrl"
+                      class="flex-1 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 px-3 py-2 text-sm text-surface-600 dark:text-surface-400 select-all font-mono"
+                    >
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1.5 rounded-lg bg-surface-200 dark:bg-surface-700 px-4 py-2 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-300 dark:hover:bg-surface-600 transition-colors shrink-0"
+                      @click="copyCareerPageLink"
+                    >
+                      <Copy class="size-3.5" />
+                      {{ careerPageLinkCopied ? 'Copied!' : 'Copy' }}
+                    </button>
+                    <NuxtLink
+                      :to="careerPagePath"
+                      target="_blank"
+                      class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors shrink-0 no-underline"
+                    >
+                      <ExternalLink class="size-3.5" />
+                      Open
+                    </NuxtLink>
+                  </div>
+                </div>
+
+                <!-- Career page upgrade nudge (free orgs) -->
+                <div
+                  v-else-if="!canUseCareerPage"
+                  class="flex items-start gap-3 rounded-xl border border-brand-200 dark:border-brand-900/60 bg-brand-50/60 dark:bg-brand-950/20 px-5 py-4"
+                >
+                  <div class="flex size-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-violet-600 text-white">
+                    <Globe2 class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-surface-900 dark:text-surface-100">
+                      Put this role on a branded career page
+                    </p>
+                    <p class="mt-0.5 text-xs text-surface-500 dark:text-surface-400">
+                      A public page for all your open roles — available on the Solo plan and above.
+                    </p>
+                  </div>
+                  <NuxtLink
+                    :to="$localePath('/dashboard/settings/career-page')"
+                    class="inline-flex shrink-0 items-center gap-1 self-center rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-700 no-underline"
+                  >
+                    Learn more
+                  </NuxtLink>
                 </div>
 
                 <!-- Distribution hub -->

@@ -59,6 +59,8 @@ const responses = defineModel<Record<string, string | string[] | number | boolea
 const resume = defineModel<File | null>('resume', { default: null })
 const coverLetter = defineModel<string>('coverLetter', { default: '' })
 
+const { t } = useI18n()
+
 const isPreview = computed(() => props.mode === 'preview')
 
 /** In preview mode, clicking a field group edits it instead of focusing the input. */
@@ -72,8 +74,10 @@ function onFieldClick(field: string) {
   <div class="rounded-2xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 shadow-sm overflow-hidden">
     <!-- Card header -->
     <div class="border-b border-surface-100 dark:border-surface-800 px-6 sm:px-8 py-5">
-      <h2 class="text-base font-semibold text-surface-900 dark:text-surface-100">Your application</h2>
-      <p class="mt-0.5 text-sm text-surface-500">Fields marked with <span class="text-danger-500">*</span> are required.</p>
+      <h2 class="text-base font-semibold text-surface-900 dark:text-surface-100">{{ t('jobs.form.cardTitle') }}</h2>
+      <i18n-t keypath="jobs.form.requiredHint" tag="p" class="mt-0.5 text-sm text-surface-500">
+        <template #mark><span class="text-danger-500">*</span></template>
+      </i18n-t>
     </div>
 
     <div class="px-6 sm:px-8 py-6 sm:py-8">
@@ -109,13 +113,13 @@ function onFieldClick(field: string) {
           <!-- First Name -->
           <div>
             <label for="firstName" class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-              First Name <span class="text-danger-500">*</span>
+              {{ t('jobs.form.firstName') }} <span class="text-danger-500">*</span>
             </label>
             <input
               id="firstName"
               v-model="form.firstName"
               type="text"
-              placeholder="Jane"
+              :placeholder="t('jobs.form.firstNamePlaceholder')"
               autocomplete="given-name"
               :tabindex="isPreview ? -1 : undefined"
               :class="[
@@ -133,13 +137,13 @@ function onFieldClick(field: string) {
           <!-- Last Name -->
           <div>
             <label for="lastName" class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-              Last Name <span class="text-danger-500">*</span>
+              {{ t('jobs.form.lastName') }} <span class="text-danger-500">*</span>
             </label>
             <input
               id="lastName"
               v-model="form.lastName"
               type="text"
-              placeholder="Doe"
+              :placeholder="t('jobs.form.lastNamePlaceholder')"
               autocomplete="family-name"
               :tabindex="isPreview ? -1 : undefined"
               :class="[
@@ -161,13 +165,13 @@ function onFieldClick(field: string) {
           @click="onFieldClick('email')"
         >
           <label for="email" class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-            Email <span class="text-danger-500">*</span>
+            {{ t('jobs.form.email') }} <span class="text-danger-500">*</span>
           </label>
           <input
             id="email"
             v-model="form.email"
             type="email"
-            placeholder="you@example.com"
+            :placeholder="t('jobs.form.emailPlaceholder')"
             autocomplete="email"
             :tabindex="isPreview ? -1 : undefined"
             :class="[
@@ -189,15 +193,15 @@ function onFieldClick(field: string) {
           @click="onFieldClick('phone')"
         >
           <label for="phone" class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-            Phone
+            {{ t('jobs.form.phone') }}
             <span v-if="job.phoneRequirement === 'required'" class="text-danger-500">*</span>
-            <span v-else class="text-surface-400 font-normal text-xs">(optional)</span>
+            <span v-else class="text-surface-400 font-normal text-xs">{{ t('jobs.form.optional') }}</span>
           </label>
           <input
             id="phone"
             v-model="form.phone"
             type="tel"
-            placeholder="+1 (555) 123-4567"
+            :placeholder="t('jobs.form.phonePlaceholder')"
             autocomplete="tel"
             :tabindex="isPreview ? -1 : undefined"
             @input="emit('clear-error', 'phone')"
@@ -223,7 +227,7 @@ function onFieldClick(field: string) {
               @click="onFieldClick('resume')"
             >
               <label for="resume" class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-                Resume / CV <span class="text-danger-500">*</span>
+                {{ t('jobs.form.resume') }} <span class="text-danger-500">*</span>
               </label>
               <div
                 class="relative flex items-center gap-3 rounded-xl border border-dashed px-4 py-3 transition-colors"
@@ -238,14 +242,14 @@ function onFieldClick(field: string) {
                 </svg>
                 <div class="flex-1 min-w-0">
                   <p v-if="resume" class="text-sm text-surface-900 dark:text-surface-100 truncate">{{ resume.name }}</p>
-                  <p v-else class="text-sm text-surface-500">PDF, DOC, or DOCX — max 10 MB</p>
+                  <p v-else class="text-sm text-surface-500">{{ t('jobs.form.resumeHelp') }}</p>
                 </div>
                 <label
                   for="resume"
                   class="shrink-0 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 px-3 py-1.5 text-xs font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-600 transition-colors"
                   :class="isPreview ? 'pointer-events-none' : 'cursor-pointer'"
                 >
-                  {{ resume ? 'Change' : 'Choose file' }}
+                  {{ resume ? t('jobs.form.change') : t('jobs.form.chooseFile') }}
                 </label>
                 <input
                   id="resume"
@@ -269,14 +273,14 @@ function onFieldClick(field: string) {
               @click="onFieldClick('coverLetter')"
             >
               <label for="coverLetterText" class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-                Cover Letter <span class="text-danger-500">*</span>
+                {{ t('jobs.form.coverLetter') }} <span class="text-danger-500">*</span>
               </label>
               <textarea
                 id="coverLetterText"
                 v-model="coverLetter"
                 rows="6"
                 maxlength="10000"
-                placeholder="Tell us why you're interested in this role…"
+                :placeholder="t('jobs.form.coverLetterPlaceholder')"
                 :tabindex="isPreview ? -1 : undefined"
                 :class="[
                   'w-full rounded-xl border px-4 py-3 text-sm text-surface-900 dark:text-surface-100 bg-white dark:bg-surface-800 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors',
@@ -289,7 +293,7 @@ function onFieldClick(field: string) {
                 <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 {{ errors.coverLetter }}
               </p>
-              <p v-else class="mt-1.5 text-xs text-surface-500">Max 10,000 characters.</p>
+              <p v-else class="mt-1.5 text-xs text-surface-500">{{ t('jobs.form.coverLetterMax') }}</p>
             </div>
           </div>
         </template>
@@ -297,7 +301,7 @@ function onFieldClick(field: string) {
         <!-- Custom questions -->
         <template v-if="job.questions && job.questions.length > 0">
           <div class="border-t border-surface-100 dark:border-surface-800 pt-5">
-            <p class="text-sm font-medium text-surface-700 dark:text-surface-300 mb-4">Additional questions</p>
+            <p class="text-sm font-medium text-surface-700 dark:text-surface-300 mb-4">{{ t('jobs.form.additionalQuestions') }}</p>
             <div class="space-y-5">
               <div
                 v-for="q in job.questions"
@@ -338,9 +342,9 @@ function onFieldClick(field: string) {
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            {{ isSubmitting ? 'Submitting…' : 'Submit Application' }}
+            {{ isSubmitting ? t('jobs.form.submitting') : t('jobs.form.submit') }}
           </button>
-          <p class="text-xs text-surface-400">Your information is kept confidential.</p>
+          <p class="text-xs text-surface-400">{{ t('jobs.form.confidential') }}</p>
         </div>
       </form>
     </div>

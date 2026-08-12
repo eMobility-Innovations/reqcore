@@ -11,12 +11,14 @@ defineProps<{
   }
 }>()
 
-const typeLabels: Record<string, string> = {
-  full_time: 'Full-time',
-  part_time: 'Part-time',
-  contract: 'Contract',
-  internship: 'Internship',
-}
+const { t } = useI18n()
+
+const typeLabels = computed<Record<string, string>>(() => ({
+  full_time: t('career.type.full_time'),
+  part_time: t('career.type.part_time'),
+  contract: t('career.type.contract'),
+  internship: t('career.type.internship'),
+}))
 </script>
 
 <template>

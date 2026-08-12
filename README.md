@@ -15,7 +15,7 @@
 
 A flood of applicants turns hiring into a full-time scroll. Reqcore takes every application on a role, runs it through an AI shortlist, and shows you exactly why each candidate was ranked the way they were — no black box. No per-seat fees, unlimited applicants on every plan.
 
-Reqcore is open-core: the full hiring workflow — jobs, pipeline, applications, documents, job board, and AI shortlisting — is AGPLv3 and lives in this repo. A small set of paid, cloud-only features (SSO/SAML, audit log, source analytics, BYOK) live under [`ee/`](ee) on a separate commercial license. The core scoring and shortlist logic never depends on `ee/` — that's the part self-hosters and evaluators need to be able to trust and verify.
+Reqcore is open-core: the full hiring workflow — jobs, pipeline, applications, documents, job board, and AI shortlisting — is AGPLv3 and lives in this repo. A small set of paid, cloud-only features (SSO/SAML, audit log, source analytics) live under [`ee/`](ee) on a separate commercial license. The core scoring and shortlist logic never depends on `ee/` — that's the part self-hosters and evaluators need to be able to trust and verify.
 
 > The fastest way to use Reqcore is the hosted product at [reqcore.com](https://reqcore.com) — free until your first shortlist, no card required. Prefer to run it yourself? See [Self-Hosting](#self-hosting) below.
 
@@ -57,10 +57,10 @@ Reqcore is free to start and priced per active role, not per seat — invite you
 
 | Plan | Price | Active roles | Highlights |
 |------|-------|:---:|------------|
-| **Free** | $0 | 1 | Unlimited applicants, one AI shortlist to try it |
-| **Solo** | $79/mo | 2 | Unlimited AI shortlists, full shortlist workflow |
-| **Team** | $239/mo | 8 | Deeper per-application analysis, custom domain, integrations |
-| **Scale** | $599/mo | 24 | SSO/SAML/SCIM, audit log, DPA/SLA, bring your own AI key |
+| **Free** | $0 | 1 | Unlimited applicants, one AI shortlist to try it, bring your own AI key |
+| **Solo** | $79/mo | 2 | Unlimited AI shortlists, bring your own AI key, full shortlist workflow |
+| **Team** | $239/mo | 8 | Bring your own AI key, deeper per-application analysis, custom domain, integrations |
+| **Scale** | $599/mo | 24 | SSO/SAML/SCIM, audit log, DPA/SLA |
 | **Agency** | Contact us | Unlimited | Custom contract |
 
 See the live [pricing page](https://reqcore.com/pricing) for full details. Self-hosted instances use the same plan gates — see [Licensing & self-hosting](#licensing--self-hosting).

@@ -9,6 +9,8 @@
     "**/Thumbs.db",
     "**/.classpath",
     "**/.settings",
+    "**/node_modules",
+    "**/.nuxt",
     "**/.output",
     "**/dist",
     "**/build",
@@ -21,12 +23,12 @@
       "settings": {
         "typescript": {
           "tsserver": {
-            "maxTsServerMemory": 3072
+            "maxTsServerMemory": 2048
           }
         },
         "javascript": {
           "tsserver": {
-            "maxTsServerMemory": 3072
+            "maxTsServerMemory": 2048
           }
         }
       }

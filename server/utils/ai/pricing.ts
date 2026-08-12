@@ -23,11 +23,15 @@ export interface ModelPrice {
  * same model reached via OpenRouter, the native API, or a BYOK key costs us the
  * same per-token rate — only the billing *payer* differs (see `billingMode`).
  *
- * OpenRouter-style prefixed ids (e.g. `openai/gpt-4.1-mini`) are normalised to
+ * OpenRouter-style prefixed ids (e.g. `openai/gpt-5.4-mini`) are normalised to
  * the bare id before lookup, so both forms resolve here.
  */
 export const MODEL_PRICING: Record<string, ModelPrice> = {
   // OpenAI
+  'gpt-5.5': { inputPer1m: 5.0, outputPer1m: 30.0 },
+  'gpt-5.4': { inputPer1m: 2.5, outputPer1m: 15.0 },
+  'gpt-5.4-mini': { inputPer1m: 0.75, outputPer1m: 4.5 },
+  'gpt-5.4-nano': { inputPer1m: 0.2, outputPer1m: 1.25 },
   'gpt-4.1': { inputPer1m: 2.0, outputPer1m: 8.0 },
   'gpt-4.1-mini': { inputPer1m: 0.4, outputPer1m: 1.6 },
   'gpt-4.1-nano': { inputPer1m: 0.1, outputPer1m: 0.4 },
@@ -36,10 +40,18 @@ export const MODEL_PRICING: Record<string, ModelPrice> = {
   'o3': { inputPer1m: 2.0, outputPer1m: 8.0 },
   'o4-mini': { inputPer1m: 1.1, outputPer1m: 4.4 },
   // Anthropic
+  'claude-fable-5': { inputPer1m: 10.0, outputPer1m: 50.0 },
+  'claude-opus-4-8': { inputPer1m: 5.0, outputPer1m: 25.0 },
+  'claude-sonnet-5': { inputPer1m: 2.0, outputPer1m: 10.0 },
+  'claude-haiku-4-5-20251001': { inputPer1m: 1.0, outputPer1m: 5.0 },
   'claude-opus-4-20250514': { inputPer1m: 15.0, outputPer1m: 75.0 },
   'claude-sonnet-4-20250514': { inputPer1m: 3.0, outputPer1m: 15.0 },
   'claude-3-5-haiku-20241022': { inputPer1m: 0.8, outputPer1m: 4.0 },
   // Google
+  'gemini-3.5-flash': { inputPer1m: 1.5, outputPer1m: 9.0 },
+  'gemini-3.1-pro-preview': { inputPer1m: 2.0, outputPer1m: 12.0 },
+  'gemini-3-flash-preview': { inputPer1m: 0.5, outputPer1m: 3.0 },
+  'gemini-3.1-flash-lite': { inputPer1m: 0.25, outputPer1m: 1.5 },
   'gemini-2.5-pro': { inputPer1m: 1.25, outputPer1m: 10.0 },
   'gemini-2.5-flash': { inputPer1m: 0.3, outputPer1m: 2.5 },
   'gemini-2.0-flash': { inputPer1m: 0.1, outputPer1m: 0.4 },

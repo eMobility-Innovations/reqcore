@@ -36,6 +36,7 @@ export interface ChatbotAiConfigSummary {
   isDefaultChatbot: boolean
   isDefaultAnalysis: boolean
   hasApiKey: boolean
+  source?: 'byok' | 'platform'
 }
 
 interface FetchErrorLike {
@@ -118,7 +119,7 @@ export function useChatbot() {
       conversations.value = convRes.conversations
       folders.value = folderRes.folders
       agents.value = agentRes.agents
-      aiConfigs.value = Array.isArray(configRes) ? configRes : []
+      aiConfigs.value = Array.isArray(configRes) ? configRes.filter(c => c.source !== 'platform') : []
       if (selectedAgentId.value === null && defaultAgent.value) {
         selectedAgentId.value = defaultAgent.value.id
       }
@@ -130,7 +131,7 @@ export function useChatbot() {
   async function refreshAiConfigs() {
     try {
       const res = await $fetch<ChatbotAiConfigSummary[]>('/api/ai-config')
-      aiConfigs.value = Array.isArray(res) ? res : []
+      aiConfigs.value = Array.isArray(res) ? res.filter(c => c.source !== 'platform') : []
     } catch (err) {
       reportError(err, 'Failed to refresh AI configurations')
     }

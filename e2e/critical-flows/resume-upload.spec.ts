@@ -1,5 +1,5 @@
 import { type Browser } from '@playwright/test'
-import { test, expect, declineAnalyticsConsent } from '../fixtures'
+import { test, expect, declineAnalyticsConsent, getPublishedApplicationLink } from '../fixtures'
 import {
   VALID_FILE_CONFIGS,
   INVALID_FILE_CONFIGS,
@@ -171,7 +171,7 @@ test.describe('Resume Upload — All File Formats', () => {
 
     await expect(page.getByRole('heading', { name: 'Your job is live!' })).toBeVisible({ timeout: 20_000 })
 
-    applicationLink = await page.locator('input[readonly]').inputValue()
+    applicationLink = await getPublishedApplicationLink(page)
     expect(applicationLink).toMatch(/\/jobs\/[^/]+\/apply(?:$|[?#])/)
     const slugMatch = applicationLink.match(/\/jobs\/([^/]+)\/apply(?:$|[?#])/)
     jobSlug = slugMatch?.[1] ?? ''
@@ -297,7 +297,7 @@ async function assertUploadResult(
       waitUntil: 'commit',
       timeout: 15_000,
     })
-    await expect(page.getByRole('heading', { name: 'Application Submitted!' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Application received' })).toBeVisible()
   } else {
     // Server should reject with 400
     expect(status, `${fileConfig.label}: expected 400 but got ${status}`).toBe(400)

@@ -6,6 +6,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const { t, locale } = useI18n()
 
 /** Forward source-tracking query params (?ref=, utm_*) through navigation */
 const sourceQuery = computed(() => {
@@ -32,17 +33,24 @@ const brandMeta = _brand === 'escooter-clinic'
       description: 'Browse open roles at Escooter Clinic and apply directly.',
       ogTitle: 'Open Positions — Escooter Clinic',
       ogDescription: 'Browse open roles at Escooter Clinic and apply directly.',
+      twitterDescription: 'Browse open roles at Escooter Clinic and apply directly.',
       ogImage: `${_siteUrl}/brand/escooter-clinic-og.png`,
     }
   : {
-      title: 'Open Positions — Job Board',
-      description: 'Browse open job positions on Reqcore and apply directly. Find your next career opportunity with companies that value transparency.',
-      ogTitle: 'Open Positions — Reqcore Job Board',
-      ogDescription: 'Browse open job positions and apply directly. Powered by the open-source ATS you actually own.',
+      // v1.6.0 moved these strings into i18n. The unbranded board is upstream's
+      // board, so it takes upstream's translated copy rather than the English
+      // literals this fork used to carry; only the OG image stays local.
+      title: t('jobs.list.metaTitle'),
+      description: t('jobs.list.metaDescription'),
+      ogTitle: t('jobs.list.ogTitle'),
+      ogDescription: t('jobs.list.ogDescription'),
+      twitterDescription: t('jobs.list.twitterDescription'),
       ogImage: `${_siteUrl}/brand/remote-crew-og.png`,
     }
 
 useSeoMeta({
+  // brandMeta already resolves to upstream's i18n strings for the unbranded
+  // board and to ESC copy for the branded one, so this stays a single call.
   title: brandMeta.title,
   description: brandMeta.description,
   ogTitle: brandMeta.ogTitle,
@@ -52,7 +60,7 @@ useSeoMeta({
   twitterCard: 'summary_large_image',
   twitterImage: brandMeta.ogImage,
   twitterTitle: brandMeta.ogTitle,
-  twitterDescription: brandMeta.description,
+  twitterDescription: brandMeta.twitterDescription,
 })
 
 // ─────────────────────────────────────────────
@@ -99,22 +107,20 @@ const totalPages = computed(() => Math.ceil(total.value / 20))
 // ─────────────────────────────────────────────
 // i18n-aware display helpers
 // ─────────────────────────────────────────────
-const { locale } = useI18n()
+const typeLabels = computed<Record<string, string>>(() => ({
+  full_time: t('career.type.full_time'),
+  part_time: t('career.type.part_time'),
+  contract: t('career.type.contract'),
+  internship: t('career.type.internship'),
+}))
 
-const typeLabels: Record<string, string> = {
-  full_time: 'Full-time',
-  part_time: 'Part-time',
-  contract: 'Contract',
-  internship: 'Internship',
-}
-
-const typeOptions = [
-  { label: 'All types', value: undefined },
-  { label: 'Full-time', value: 'full_time' },
-  { label: 'Part-time', value: 'part_time' },
-  { label: 'Contract', value: 'contract' },
-  { label: 'Internship', value: 'internship' },
-] as const
+const typeOptions = computed(() => [
+  { label: t('jobs.list.allTypes'), value: undefined },
+  { label: t('career.type.full_time'), value: 'full_time' },
+  { label: t('career.type.part_time'), value: 'part_time' },
+  { label: t('career.type.contract'), value: 'contract' },
+  { label: t('career.type.internship'), value: 'internship' },
+])
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString(locale.value, {
@@ -129,9 +135,9 @@ function formatDate(dateStr: string) {
   <div>
     <!-- Page header -->
     <div class="mb-8">
-      <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-100">Open Positions</h1>
+      <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-100">{{ t('jobs.list.title') }}</h1>
       <p class="text-sm text-surface-500 mt-1">
-        Browse our current openings and find your next opportunity.
+        {{ t('jobs.list.subtitle') }}
       </p>
     </div>
 
@@ -143,7 +149,7 @@ function formatDate(dateStr: string) {
         <input
           v-model="searchInput"
           type="text"
-          placeholder="Search jobs by title or location…"
+          :placeholder="t('jobs.list.searchPlaceholder')"
           class="w-full rounded-lg border border-surface-300 dark:border-surface-700 pl-9 pr-3 py-2 text-sm text-surface-900 dark:text-surface-100 bg-white dark:bg-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
         />
       </div>
@@ -162,7 +168,7 @@ function formatDate(dateStr: string) {
 
     <!-- Loading state -->
     <div v-if="fetchStatus === 'pending'" class="text-center py-16 text-surface-400">
-      Loading positions…
+      {{ t('jobs.list.loading') }}
     </div>
 
     <!-- Error state -->
@@ -170,8 +176,8 @@ function formatDate(dateStr: string) {
       v-else-if="error"
       class="rounded-lg border border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-950 p-4 text-sm text-danger-700 dark:text-danger-400"
     >
-      Failed to load jobs. Please try again.
-      <button class="underline ml-1 cursor-pointer" @click="refresh()">Retry</button>
+      {{ t('jobs.list.errorLoad') }}
+      <button class="underline ml-1 cursor-pointer" @click="refresh()">{{ t('jobs.list.retry') }}</button>
     </div>
 
     <!-- Empty state -->
@@ -180,13 +186,13 @@ function formatDate(dateStr: string) {
       class="rounded-lg border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 p-12 text-center"
     >
       <Briefcase class="size-10 text-surface-300 mx-auto mb-3" />
-      <h3 class="text-base font-semibold text-surface-700 dark:text-surface-300 mb-1">No open positions</h3>
+      <h3 class="text-base font-semibold text-surface-700 dark:text-surface-300 mb-1">{{ t('jobs.list.emptyTitle') }}</h3>
       <p class="text-sm text-surface-500">
         <template v-if="searchQuery || typeFilter">
-          No jobs match your current filters. Try adjusting your search.
+          {{ t('jobs.list.emptyFiltered') }}
         </template>
         <template v-else>
-          There are no open positions right now. Check back soon!
+          {{ t('jobs.list.emptyDefault') }}
         </template>
       </p>
     </div>
@@ -217,7 +223,7 @@ function formatDate(dateStr: string) {
                 {{ j.location }}
               </span>
               <span class="text-surface-400">
-                Posted {{ formatDate(j.createdAt) }}
+                {{ t('jobs.detail.postedOn', { date: formatDate(j.createdAt) }) }}
               </span>
             </div>
 
@@ -240,11 +246,11 @@ function formatDate(dateStr: string) {
           @click="page--"
         >
           <ChevronLeft class="size-4" />
-          Previous
+          {{ t('jobs.list.previous') }}
         </button>
 
         <span class="text-sm text-surface-500">
-          Page {{ page }} of {{ totalPages }}
+          {{ t('jobs.list.pageOf', { page, total: totalPages }) }}
         </span>
 
         <button
@@ -252,14 +258,14 @@ function formatDate(dateStr: string) {
           class="inline-flex items-center gap-1 rounded-lg border border-surface-300 dark:border-surface-700 px-3 py-1.5 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           @click="page++"
         >
-          Next
+          {{ t('jobs.list.next') }}
           <ChevronRight class="size-4" />
         </button>
       </div>
 
       <!-- Total count -->
       <p class="text-xs text-surface-400 pt-1">
-        {{ total }} open position{{ total === 1 ? '' : 's' }}
+        {{ t('jobs.list.totalCount', { count: total }, total) }}
       </p>
     </div>
   </div>

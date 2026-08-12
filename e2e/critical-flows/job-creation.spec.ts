@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures'
+import { test, expect, getPublishedApplicationLink } from '../fixtures'
 
 /**
  * Critical flow: Recruiter creates and publishes a job.
@@ -175,7 +175,7 @@ test.describe('Job Creation Flow', () => {
     await expect(page.getByRole('heading', { name: 'Your job is live!' })).toBeVisible({ timeout: 20_000 })
 
     // ── Extract job slug from the application link ────────
-    const applicationLink = await page.locator('input[readonly]').inputValue()
+    const applicationLink = await getPublishedApplicationLink(page)
     expect(applicationLink).toMatch(/\/jobs\/[^/]+\/apply(?:$|[?#])/)
     const slugMatch = applicationLink.match(/\/jobs\/([^/]+)\/apply(?:$|[?#])/)
     const jobSlug = slugMatch?.[1] ?? ''

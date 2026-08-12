@@ -44,6 +44,7 @@ interface AiConfigRow {
   isDefaultChatbot: boolean
   isDefaultAnalysis: boolean
   hasApiKey: boolean
+  source?: 'byok' | 'platform'
 }
 
 const props = defineProps<{
@@ -263,7 +264,7 @@ const badgeLabel = (badge?: ModelInfo['badge']) => {
         </header>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
-            v-for="(info, key) in providers ?? {}"
+            v-for="(info, key) in (providers ?? {})"
             :key="key"
             type="button"
             class="flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer"
@@ -337,7 +338,7 @@ const badgeLabel = (badge?: ModelInfo['badge']) => {
             <input
               v-model="form.model"
               type="text"
-              placeholder="e.g. gpt-4.1-mini, llama-3.1-70b, mistral-large-latest"
+              placeholder="e.g. gpt-5.4-mini, claude-sonnet-5, gemini-3.5-flash"
               class="w-full rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 px-3 py-2 text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors font-mono"
             >
             <p class="mt-1 text-[11px] text-surface-500">
