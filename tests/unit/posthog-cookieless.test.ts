@@ -14,7 +14,8 @@
  *   - org group enriched with org name
  *   - UTM + first-touch attribution captured
  */
-import { describe, it, expect } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { computed, ref } from 'vue'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -82,15 +83,97 @@ describe('Consent surface (banner + composable)', () => {
     expect(consent).toMatch(/consent_granted/)
   })
 
-  it('renders ConsentBanner only while consent is undecided', () => {
+  it('keeps ConsentBanner mountable, gated on needsConsent', () => {
     expect(existsSync(resolve(ROOT, 'app/components/ConsentBanner.vue'))).toBe(true)
     const banner = read('app/components/ConsentBanner.vue')
     expect(banner).toMatch(/v-if="needsConsent"/)
     expect(banner).toMatch(/acceptAnalytics/)
     expect(banner).toMatch(/declineAnalytics/)
+  })
 
-    const appVue = read('app/app.vue')
-    expect(appVue).toMatch(/<ConsentBanner\s*\/>/)
+  it('deliberately does NOT mount ConsentBanner on this deployment', () => {
+    // 961a60a ("public board at remotecrew.co.uk/jobs + remove reqcore consent
+    // popup") removed `<ConsentBanner />` from app.vue on purpose. This asserted
+    // the opposite for months without failing anything, because the push gate on
+    // this branch does not exist and `main`'s had no `test` script behind its
+    // `--if-present`. Consent can therefore no longer be GRANTED here, so every
+    // visitor stays in the cookieless tier the tests above pin — which is why
+    // those tests, not this one, are the substance.
+    //
+    // If you re-add the banner, this test failing is the intended prompt to
+    // re-read that decision rather than a bug.
+    expect(read('app/app.vue')).not.toMatch(/<ConsentBanner\s*\/>/)
+  })
+})
+
+/**
+ * The consent STATE MACHINE, exercised rather than grepped.
+ *
+ * Everything above reads source text, which is how the removal of
+ * `<ConsentBanner />` went unnoticed by a test whose whole subject was the
+ * consent surface. These call the real composable with the Nuxt auto-imports
+ * stubbed, so they fail if the behaviour changes rather than if the wording does.
+ *
+ * `import.meta.client` is undefined under vitest, so the client-only UTM and
+ * `capture('consent_granted')` block does not run here — the assertions below
+ * deliberately stop at the persistence upgrade, which is the GDPR-relevant gate.
+ */
+describe('useAnalyticsConsent behaviour', () => {
+  let cookie: ReturnType<typeof ref<string | null>>
+  let setConfigCalls: Array<Record<string, unknown>>
+
+  beforeEach(() => {
+    // A real ref, so the computeds under test are genuinely reactive rather
+    // than reading a stale cache off a plain object.
+    cookie = ref<string | null>(null)
+    setConfigCalls = []
+    vi.stubGlobal('computed', computed)
+    vi.stubGlobal('useCookie', () => cookie)
+    vi.stubGlobal('useRuntimeConfig', () => ({ public: { cookieDomain: '' } }))
+    vi.stubGlobal('useNuxtApp', () => ({
+      $posthog: () => ({
+        set_config: (c: Record<string, unknown>) => setConfigCalls.push(c),
+        register: () => {},
+        register_once: () => {},
+        capture: () => {},
+      }),
+    }))
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  const load = async () => (await import('../../app/composables/useAnalyticsConsent')).useAnalyticsConsent()
+
+  it('starts undecided when no cookie is set', async () => {
+    const c = await load()
+    expect(c.needsConsent.value).toBe(true)
+    expect(c.hasConsented.value).toBe(false)
+    expect(c.hasDeclined.value).toBe(false)
+  })
+
+  it('accept grants consent AND upgrades persistence to cookies', async () => {
+    const c = await load()
+    c.acceptAnalytics()
+
+    expect(cookie.value).toBe('granted')
+    expect(c.hasConsented.value).toBe(true)
+    expect(c.needsConsent.value).toBe(false)
+    expect(setConfigCalls).toHaveLength(1)
+    expect(setConfigCalls[0]).toMatchObject({
+      persistence: 'localStorage+cookie',
+      cross_subdomain_cookie: true,
+    })
+  })
+
+  it('decline records the choice and NEVER enables cookie persistence', async () => {
+    const c = await load()
+    c.declineAnalytics()
+
+    expect(cookie.value).toBe('denied')
+    expect(c.hasDeclined.value).toBe(true)
+    expect(c.needsConsent.value).toBe(false)
+    // The whole point: declining must leave the cookieless tier untouched.
+    expect(setConfigCalls).toEqual([])
   })
 })
 
