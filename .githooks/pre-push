@@ -112,9 +112,27 @@ _pp_gate() {
 }
 # <<< gate routing <<<
 
-if _pp_gate; then
+# THE STATUS IS KEPT, not discarded by `if`. To an `if`, a gate that FAILED and a
+# gate that was KILLED before it reached a verdict are the same thing, and telling
+# them apart is the whole point of the branch below.
+_pp_gate; _pp_rc=$?
+if [ "$_pp_rc" -eq 0 ]; then
   printf '\npre-push: gates passed — pushing.\n'
   exit 0
+fi
+
+# `claude-gate-run` reserves exit 3 for "a signal ended me before the suite reached a
+# verdict" (claude-code-policy#834). The `command -v` guard is load-bearing: 3 means
+# that only when the wrapper is what ran. On the local leg `./verify.sh` is this
+# repo's own and may exit 3 on its own account, and reading that as a kill would turn
+# a real red into "just push again".
+if [ "$_pp_rc" -eq 3 ] && command -v claude-gate-run >/dev/null 2>&1; then
+  printf '\n'
+  printf 'pre-push: THE GATE COULD NOT RUN — push refused. It did not fail.\n' >&2
+  printf 'pre-push: the suite was ended before it reached a verdict, so NOTHING\n' >&2
+  printf '    was validated and there is no finding above to act on. Push again.\n' >&2
+  printf '    If it repeats, the rail is the thing to look at, not your code.\n' >&2
+  exit 1
 fi
 
 printf '\n'
