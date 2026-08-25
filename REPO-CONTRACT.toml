@@ -114,4 +114,11 @@ they require Docker Compose v2 and a running Docker daemon.
 # || >=24.11 (@babel/generator 8), and a lockfile regenerated on a different npm MAJOR is
 # rejected by npm ci inside the image.
 # verify.sh requires node, npm, and npx (verify.sh lines 13-15).
-toolchains = ["node@22.22"]
+#
+# This said `node@22.22` until 2026-08-25 and that was not installable. `.nvmrc` carries the
+# string `22.22`, which is a `nvm use` shorthand, not a release. The runner fetches the
+# vendor's checksummed tarball from `https://nodejs.org/dist/v<version>/` and there is no
+# `v22.22` there. `22.22.0` is the release that satisfies `>=22.22.0 <23`, matches the
+# `node:22.22-alpine` builder image, and `https://nodejs.org/dist/v22.22.0/SHASUMS256.txt`
+# answers 200 — checked 2026-08-25.
+toolchains = ["node@22.22.0"]
