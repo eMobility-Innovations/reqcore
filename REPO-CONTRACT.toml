@@ -1,0 +1,117 @@
+# THE REPO CONTRACT — what this repo is, what it does, and what proves it.
+#
+# Checked by `repo-contract-guard --check`, which also verifies this repo has tests, has
+# the commit-time gate, and offloads that gate to the runner. Any one missing is a failure.
+
+[repo]
+name         = "reqcore"
+what_it_is   = "An open-source Applicant Tracking System (ATS) built for teams that receive a high volume of applications. It turns a flood of applicants into a trustworthy shortlist with AI-powered scoring that shows its work."
+what_it_does = """
+A full-stack Nuxt 4 (Vue 3 + Nitro) ATS where teams can manage jobs, candidates, applications
+through a Kanban pipeline, accept public applications via SEO-friendly job listings, and run
+AI shortlisting with visible per-application score breakdowns. It supports multi-tenant
+organizations (Better Auth + org plugin), S3-compatible document storage for resumes and
+cover letters (Railway Buckets or MinIO), Stripe billing, resume parsing, and GDPR-aligned
+data retention with automatic candidate quarantine and erasure.
+
+If it stopped running, organizations lose the platform where their hiring workflow lives — job
+postings, candidate pipelines, application tracking, AI scoring, and the GDPR retention/erasure
+tooling. The fallback is rebuilding an ATS from scratch. The code is deployed as a Docker
+image (ghcr.io/reqcore-inc/reqcore) and can be self-hosted on a single VPS via Docker Compose
+(see SELF-HOSTING.md).
+"""
+owner        = "patryk@escooterclinic.co.uk"
+status       = "active"
+
+[rules]
+# The rules THIS repo obeys that a reader could otherwise only infer from the code.
+# EVERY LINE BELOW CITES SOMETHING READ, not something inferred from a filename.
+must = [
+  "Multi-tenant isolation is enforced at the application layer — every database query MUST include an organizationId filter derived from session.session.activeOrganizationId, and the org ID NEVER comes from user input (ARCHITECTURE.md §1 — Multi-Tenancy via Organization Plugin)",
+  "All environment variables are validated at startup via Zod in server/utils/env.ts; if any variable is missing or malformed, the server fails immediately (ARCHITECTURE.md §3 — Environment Validation)",
+  "Database migrations are auto-applied on startup using a PostgreSQL advisory lock to prevent race conditions in multi-instance deployments (ARCHITECTURE.md §4 — Auto-Applied Migrations, server/plugins/migrations.ts)",
+  "Documents are stored in S3-compatible storage and accessed only through server-proxied streaming endpoints — presigned S3 URLs are never exposed to clients (ARCHITECTURE.md §6 — File Storage & Document Security)",
+  "S3 bucket policy is enforced as private on every startup via the s3-bucket.ts plugin (ARCHITECTURE.md §6, server/plugins/s3-bucket.ts)",
+  "Upload endpoints validate file types using magic bytes via the file-type package, not just the Content-Type header (ARCHITECTURE.md §6, server/utils/schemas/document.ts)",
+  "Filenames are sanitized before storage, preventing path traversal, XSS, and filesystem exploits (ARCHITECTURE.md §6, server/utils/schemas/document.ts)",
+  "Preview is restricted to PDF only; DOC/DOCX (which can contain macros) must be downloaded (ARCHITECTURE.md §6)",
+  "The codebase deliberately has NO GitHub Actions workflows — the gate is ./verify.sh, because GitHub Actions cannot run for this org (check-no-workflows.sh, README.md — Local quality gate)",
+  "AI scoring and shortlisting logic lives in the core repo and does not depend on the commercially-licensed ee/ directory (README.md, PRODUCT.md)",
+  "The apply endpoint enforces rate limiting based on NODE_ENV=production only — the old CI-bypass pattern has been fixed (tests/unit/security-fixes.test.ts — Fix 3)",
+  "CSP script-src uses nonce-based allowlisting with no unsafe-inline (tests/unit/security-fixes.test.ts — Fix 1)",
+  "OAuth tokens are encrypted at rest using HKDF-derived keys, not raw secrets (tests/unit/security-fixes.test.ts — Fix 2)",
+  "Router params for ID/token routes are validated with Zod schemas before reaching database queries (tests/unit/security-fixes.test.ts — Fix 4)",
+  "An in-memory rate limiter emits a startup warning when RAILWAY_REPLICA_COUNT > 1 (tests/unit/security-fixes.test.ts — Fix 5)",
+  "Candidate data retention is configurable per organization with a 30-day quarantine window before erasure; erasure writes privacy-safe audit rows containing no PII (tests/unit/erasure.test.ts, tests/unit/retention.test.ts, DATA-RETENTION.md)",
+  "The erasure service deletes S3 objects before the DB graph, and does NOT delete the DB graph when an S3 object fails — leaving the key for retry (tests/unit/erasure.test.ts)",
+  "Rate limiting uses IP-based sliding window buckets, isolates per IP and per limiter instance, and emits standard X-RateLimit-* and Retry-After headers (tests/unit/rate-limit.test.ts)",
+  "Stripe billing env validation rejects partial configs so billing is not silently disabled (tests/unit/stripe-billing.test.ts)",
+  "Job creation and custom question schemas reject whitespace-only titles, duplicate options, impossible auto-scoring payloads, and oversized nested records (tests/unit/job-creation-schema.test.ts)",
+  "Session expiry is explicitly set to 24 hours, not the Better Auth default of 7 days (tests/unit/auth-security-hardening.test.ts — Session expiry configuration)",
+  "Server-side password policy enforces a minimum of 8 characters and maximum of 128 (tests/unit/auth-security-hardening.test.ts — Password policy)",
+  "PostHog tracking uses cookieless mode when the PostHog API key is configured (tests/unit/posthog-cookieless.test.ts)",
+]
+
+[tests]
+# The verify.sh script runs: npm ci → npm run lint → npx nuxi typecheck → npm run test
+# (which invokes vitest run) → npm audit --audit-level=high → npm run build.
+# The E2E suite (verify-e2e.sh) is intentionally separate and not invoked by the push gate.
+command = "./verify.sh"
+suite   = "tests/"
+covers  = """
+Unit tests exercise pure logic and server utilities without a running database or external runtime.
+Tests stub Nitro auto-imported globals (db, env, logInfo, logWarn, logError, logDebug,
+createError, getRequestIP, getHeader, setResponseHeaders) via vitest's vi.stubGlobal so the
+same assertions hold on the gate runner as on a workstation.
+
+tests/unit/resume-parser.test.ts proves that parseDocument returns null for unsupported MIME
+types, empty buffers, corrupted data, and invalid DOCX/DOC input, and that a minimal valid PDF
+produces structured content with correct metadata (sourceFormat, parserVersion, wordCount,
+pageCount). tests/unit/retention.test.ts pins that computeRetentionState correctly classifies
+active/expiring/expired/exempt candidates, that a manual review resets the clock, and that
+enabling retention never immediately expires existing data (the 30-day review window).
+tests/unit/erasure.test.ts proves that dry runs touch nothing, that tenant isolation reports
+not_found for candidates missing in the org, that S3 objects are deleted before the DB graph,
+that the DB graph is NOT deleted when an S3 object fails, and that audit rows contain no PII.
+
+tests/unit/rate-limit.test.ts pins that the limiter admits up to maxRequests then blocks with
+429, isolates buckets per IP and per limiter instance, emits standard rate-limit headers, sets
+Retry-After, respects X-Forwarded-For only through a trusted proxy, and allows new requests
+once the window slides. tests/unit/security-fixes.test.ts covers all five May 2026 security
+fixes: nonce-based CSP (no unsafe-inline), HKDF key separation, the CI env var bypass fix,
+Zod-validated router params, and the horizontal-scaling warning.
+
+tests/unit/stripe-billing.test.ts verifies that Stripe billing is enabled only when every
+Stripe var is present (partial config is rejected), that non-members cannot perform billing
+actions, and that only owners/admins can mutate subscriptions. tests/unit/job-creation-schema.test.ts
+pins that job and question schemas reject whitespace-only titles, duplicate options, impossible
+auto-scoring payloads, and oversized nested records.
+
+The remaining 23 test modules cover AI config encryption and schema, AI cost/pricing, AI
+observability, AI provider grandfathering, AI scoring materials, auth security hardening,
+billing checkout intent, billing plan resolution, candidate messaging, candidate timeline,
+career banner image optimization, create-org auto-switch, database URL resolution, demo
+account isolation, disposable email domains, email verification gate, interview scheduling,
+logger OTLP, OIDC SSO, org settings auth errors and schema, PG dump env allowlist, source
+tracking, SSO env extended, SSO integration readiness, SSO providers API, and SSO security
+and trusted origins — 48 tracked test modules in all.
+
+The E2E suite (verify-e2e.sh) exercises critical flows with a full Docker stack: job creation,
+candidate application, billing checkout, invitation management, resume upload, source tracking,
+and GDPR retention privacy flows. It also validates the Docker new-user setup.sh integration —
+secret generation, Docker Compose health, migration success, HTTP endpoint codes, and idempotent
+db:seed. These are run before release but are intentionally excluded from the push gate because
+they require Docker Compose v2 and a running Docker daemon.
+"""
+
+[runner]
+# WHAT THE GATE RUNNER MUST PROVIDE. MEASURED, never assumed:
+# .nvmrc contains "22.22" (line 1 of .nvmrc, the file itself). package.json engines specifies
+# node ">=22.22.0 <23" and npm ">=10.9.0 <11" (package.json "engines" block). The Dockerfile
+# uses node:22.22-alpine for both the builder and runner stages (Dockerfile lines 2 and 27).
+# The comment on the engines block in package.json explicitly states that the Dockerfile builder
+# image, package.json engines, and .nvmrc must match — the dependency tree requires node ^22.18
+# || >=24.11 (@babel/generator 8), and a lockfile regenerated on a different npm MAJOR is
+# rejected by npm ci inside the image.
+# verify.sh requires node, npm, and npx (verify.sh lines 13-15).
+toolchains = ["node@22.22"]
