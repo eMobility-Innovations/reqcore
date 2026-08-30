@@ -503,7 +503,14 @@ else
     echo "COMMIT BLOCKED — the alert-contract guard COULD NOT RUN. It reached no verdict." >&2
     echo "  Nothing above is a finding about this change. Re-run; if it persists the thing" >&2
     echo "  to look at is $AGUARD, not this repo." >&2
-    exit 1
+    # 125, NOT 1, AND THAT IS THE POINT. The sentence above is for a human; the CODE is
+    # for `merge-result.py`, which runs a repo's core.hooksPath pre-commit as its merge
+    # gate (GATE_HOOK_NAMES) and reads nothing but the status, where COULD_NOT_RUN = 125.
+    # Collapsed to 1, a gate that NEVER ANSWERED is indistinguishable from a branch that
+    # genuinely failed: the real red gets retried and the unrunnable guard gets blamed on
+    # the change. Still non-zero — nothing about BLOCKING changes, and a gate that cannot
+    # RUN is still not permission to skip it.
+    exit 125
   elif [ "$ALERT_RC" -ne 0 ]; then
     exit 1
   fi
@@ -576,7 +583,14 @@ else
     echo "COMMIT BLOCKED — the claude-md repo gate COULD NOT RUN. It reached no verdict." >&2
     echo "  Nothing above is a finding about this change. Re-run; if it persists the thing" >&2
     echo "  to look at is $MD_GUARD, not this repo." >&2
-    exit 1
+    # 125, NOT 1, AND THAT IS THE POINT. The sentence above is for a human; the CODE is
+    # for `merge-result.py`, which runs a repo's core.hooksPath pre-commit as its merge
+    # gate (GATE_HOOK_NAMES) and reads nothing but the status, where COULD_NOT_RUN = 125.
+    # Collapsed to 1, a gate that NEVER ANSWERED is indistinguishable from a branch that
+    # genuinely failed: the real red gets retried and the unrunnable guard gets blamed on
+    # the change. Still non-zero — nothing about BLOCKING changes, and a gate that cannot
+    # RUN is still not permission to skip it.
+    exit 125
   elif [ "$MD_RC" -ne 0 ]; then
     exit 1
   fi
