@@ -3,14 +3,19 @@
 This is a **fork** of upstream `reqcore-inc/reqcore` (remote: `upstream`).
 The deploy branch is **`esc-live`**, on `eMobility-Innovations/reqcore` — the same repository
 `escooterclinic/reqcore` used to name, seen through a rename redirect, not a third copy.
-CT213's clone still calls it `fork`. One Docker image, three runtime configs, three public surfaces.
+CT213's clone has exactly two remotes: **`origin`** → `eMobility-Innovations/reqcore`
+(SSH, through the `github-reqcore` host alias) and **`upstream`** → `reqcore-inc/reqcore`
+(HTTPS). **There is no `fork` remote** — this file claimed there was until 2026-09-19, when
+`git remote -v` on the box was read and it was not there. One Docker image, three runtime
+configs, three public surfaces.
 
 > **Prime directive: stay upstream-mergeable.** Every deviation is confined to
 > *leaf* files (layouts, pages, a self-contained server plugin/middleware, the
 > tracked compose override, and `public/brand/*` assets). We never touch broad
 > shared files (`app/assets/css/main.css`, the base `docker-compose.yml`) and we
 > keep edits to `nuxt.config.ts` to a couple of additive `runtimeConfig` keys.
-> So `git merge origin/main` only ever conflicts on the handful of lines we own.
+> So merging upstream only ever conflicts on the handful of lines we own — and on CT213 that
+> is `upstream/main`, **never** `origin/main`: `origin` there is our own repository (§2).
 
 ---
 
@@ -32,7 +37,9 @@ Redeploy (after a code/asset change):
 # ALL THREE build from the same source. `app` is the admin ATS on ats.fiszu.com — the surface
 # actually holding candidate PII — and leaving it out of the build list is how it ended up running
 # a 2026-07-13 image on 2026-08-12 while the two public boards were rebuilt the same day.
-pssh -r 213 'cd /opt/reqcore && docker compose build app app-public app-esc && docker compose up -d app app-public app-esc'
+# `pssh 213` is REFUSED as ambiguous — esc-blades-ct213 (this) and fsc-blades-ct213 (gate-runner-3)
+# both exist. Always qualify the node.
+pssh -r esc-blades-ct213 'cd /opt/reqcore && git pull && docker compose build app app-public app-esc && docker compose up -d app app-public app-esc'
 # env-only (org/brand) change → `up -d` (recreate) is enough; no rebuild.
 # Push from CT213 is fine UNLESS the diff touches .github/workflows (deploy key lacks workflow scope).
 ```
@@ -64,13 +71,26 @@ pssh -r 213 'cd /opt/reqcore && docker compose build app app-public app-esc && d
 >
 > </details>
 
-**Do NOT hard-reset `esc` to upstream.** Merge upstream INTO `esc`:
+**Do NOT hard-reset `esc-live` to upstream.** Merge upstream INTO it — and do it in a clone
+where `upstream` is authenticated, **not on CT213**. Measured 2026-09-19 on the box:
+`git ls-remote --heads upstream` fails with
+`fatal: could not read Username for 'https://github.com': No such device or address`, because
+CT213's `upstream` is an HTTPS remote with no credentials. Only `origin` (SSH) works there,
+which is why the old form of this block — `git fetch origin && git merge origin/main`, run on
+CT213 — could not do what it said: it would have merged **our own** `main` trunk, not upstream.
+
 ```bash
-cd /opt/reqcore
-git fetch origin
-git merge origin/main          # keeps the ESC commits; conflicts (if any) are
+# in a clone that carries an authenticated `upstream` (the workstation clone has the remote;
+# CT213 does not). The last sync, onto tag v1.6.0, landed this way as PR #12.
+git fetch upstream
+git switch esc-live
+git merge upstream/main        # keeps the ESC commits; conflicts (if any) are
                                # limited to the few leaf-file lines we own
-docker compose build app app-public app-esc && docker compose up -d
+git push origin esc-live       # via the merge queue on a gated repo
+
+# then on the box — all three surfaces, `app` included (see §1)
+pssh -r esc-blades-ct213 'cd /opt/reqcore && git pull && \
+  docker compose build app app-public app-esc && docker compose up -d app app-public app-esc'
 ```
 If `esc` is ever blown away, the two oldest cosmetic deviations can be re-applied
 from `overlay/esc/patches/*.patch` (RC white-label + consent-banner removal). The
